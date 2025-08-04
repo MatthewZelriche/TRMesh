@@ -1,6 +1,3 @@
 #include "TRMesh/test.hpp"
 
-int test()
-{
-   return 42;
-}
+int test() { return 42; }
