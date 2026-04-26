@@ -1,6 +1,4 @@
-// Project-wide type aliases for mesh slot handles. Prefer these names in public
-// API and connectivity structs; generic storage still uses Handle<TTag>.
-
-global using VertexHandle = TREditorSharp.Handle<TREditorSharp.VertexTag>;
-global using HalfEdgeHandle = TREditorSharp.Handle<TREditorSharp.HalfEdgeTag>;
-global using FaceHandle = TREditorSharp.Handle<TREditorSharp.FaceTag>;
+// Public type aliases for connectivity handles.
+global using FaceHandle = TREditorSharp.Storage.Handle<TREditorSharp.FaceTag>;
+global using HalfEdgeHandle = TREditorSharp.Storage.Handle<TREditorSharp.HalfEdgeTag>;
+global using VertexHandle = TREditorSharp.Storage.Handle<TREditorSharp.VertexTag>;

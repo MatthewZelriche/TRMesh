@@ -1,10 +1,9 @@
 namespace TREditorSharp;
 
 /// <summary>
-/// Phantom marker for vertex slots at the type level. Zero-size <c>struct</c>; use only
+/// Phantom marker for vertex slots at the type level. Zero-size <c>struct</c>; used only
 /// as a generic type argument (e.g. <c>Handle&lt;VertexTag&gt;</c>,
-/// <see cref="TopologyStorage{TTag, TConnectivity}"/>). Unmanaged so
-/// <c>where TTag : unmanaged</c> constraints apply.
+/// <see cref="TopologyStorage{TTag, TConnectivity}"/>).
 /// </summary>
 public readonly struct VertexTag { }
 

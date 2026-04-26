@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace TREditorSharp;
+namespace TREditorSharp.Storage;
 
 /// <summary>
 /// Stable, generationally-versioned handle to a slot in a pool keyed by the phantom
@@ -14,7 +14,8 @@ namespace TREditorSharp;
 ///
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
-public readonly record struct Handle<TKind>(int Index, int Generation) where TKind : unmanaged
+public readonly record struct Handle<TKind>(int Index, int Generation)
+    where TKind : unmanaged
 {
     public static Handle<TKind> Null => default;
 
@@ -26,7 +27,8 @@ public readonly record struct Handle<TKind>(int Index, int Generation) where TKi
 
     public override string ToString()
     {
-        if (IsNull) return $"Handle<{typeof(TKind).Name}>.Null";
+        if (IsNull)
+            return $"Handle<{typeof(TKind).Name}>.Null";
         char prefix = typeof(TKind).Name switch
         {
             nameof(VertexTag) => 'V',

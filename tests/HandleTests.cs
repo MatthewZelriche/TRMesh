@@ -34,14 +34,4 @@ public class HandleTests
         Assert.NotEqual(a, c);
         Assert.True(a != c);
     }
-
-    [Fact]
-    public void HandlesWithDifferentKindsAreNotAssignmentCompatible()
-    {
-        // Compile-time: VertexHandle cannot be assigned to HalfEdgeHandle.
-        VertexHandle v = default;
-        HalfEdgeHandle h = default;
-        FaceHandle f = default;
-        Assert.True(v.IsNull && h.IsNull && f.IsNull);
-    }
 }
