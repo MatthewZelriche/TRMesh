@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using TREditorSharp.Storage;
 
-public sealed partial class HalfEdgeMesh
+public partial class HalfEdgeMesh
 {
     /// <summary>
     /// Iterate the outgoing half-edges around <paramref name="vertex"/> in

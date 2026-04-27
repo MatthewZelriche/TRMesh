@@ -12,3 +12,10 @@ public readonly struct HalfEdgeTag { }
 
 /// <summary>Phantom marker for face slots. See <see cref="VertexTag"/>.</summary>
 public readonly struct FaceTag { }
+
+/// <summary>
+/// Phantom marker for a vertex-position component column (e.g. <c>Vector3</c> positions)
+/// stored in <see cref="TopologyStorage{TTag, TConnectivity}"/>. This tag exists so a mesh
+/// can have multiple <c>Vector3</c> columns (position, normal, etc.) without ambiguity.
+/// </summary>
+public readonly struct VertexPositionTag { }

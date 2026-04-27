@@ -14,7 +14,7 @@ using TREditorSharp.Storage;
 /// Implements <see cref="IDisposable"/> because user-registered native columns
 /// own unmanaged memory.
 /// </summary>
-public sealed partial class HalfEdgeMesh : IDisposable
+public partial class HalfEdgeMesh : IDisposable
 {
     public TopologyStorage<VertexTag, Vertex> Vertices { get; }
 
