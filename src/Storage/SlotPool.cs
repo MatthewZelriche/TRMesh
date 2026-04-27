@@ -84,14 +84,13 @@ internal sealed class SlotPool<TTag>
     public int GetDenseIndex(Handle<TTag> handle) => _set.GetDenseIndex(handle);
 
     /// <summary>
-    /// Validate the handle. In a MESH_VALIDATE build (Debug by default) throws if the
-    /// handle is null, out of range, stale, or refers to a freed slot. Compiled out in
-    /// release builds for max throughput.
+    /// Validate the handle. In Debug builds throws if the handle is null, out of range, stale,
+    /// or refers to a freed slot. Compiled out in Release builds for max throughput.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ValidateLive(Handle<TTag> handle)
     {
-#if MESH_VALIDATE
+#if DEBUG
         if (!_set.Contains(handle))
             ThrowInvalid(handle);
 #endif
