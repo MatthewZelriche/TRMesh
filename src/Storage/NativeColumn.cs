@@ -72,6 +72,25 @@ public sealed unsafe class NativeColumn<T> : IComponentColumn, IDisposable
     }
 
     /// <summary>
+    /// <para>
+    /// Bounds-check-elided direct reference into the backing buffer at <paramref name="index"/>.
+    /// This is the zero-copy counterpart to the <see cref="this[int]"/> indexer.
+    /// </para>
+    /// <para>
+    /// <b>Unsafe lifetime contract (read carefully):</b> the returned <see cref="ref T"/> is valid
+    /// only while this column’s backing storage for slot <paramref name="index"/> remains unmutated.
+    /// It becomes invalid immediately if any of the following occur before you are done using the ref.
+    /// Never modify the backing storage while a ref exists.
+    /// </para>
+    /// <para>
+    /// Caller must guarantee index is in bounds.
+    /// </para>
+    /// </summary>
+    /// <param name="index">Dense index into the live region <c>[0, Count)</c>.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref T UnsafeRef(int index) => ref Unsafe.AsRef<T>(_data + index);
+
+    /// <summary>
     /// Span over the live region <c>[0, Count)</c>. Becomes invalid after any
     /// grow or Dispose.
     /// </summary>

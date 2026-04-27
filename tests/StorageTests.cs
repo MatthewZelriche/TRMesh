@@ -102,11 +102,11 @@ public class StorageTests
         using var mesh = new HalfEdgeMesh();
         var v = mesh.Vertices.Allocate();
         var he = mesh.HalfEdges.Allocate();
-        var vData = mesh.Vertices.GetConnectivity(v);
+        var vData = mesh.Vertices[v];
         vData.OutgoingHalfEdge = he;
-        mesh.Vertices.SetConnectivity(v, vData);
+        mesh.Vertices[v] = vData;
 
-        Assert.Equal(he, mesh.Vertices.GetConnectivity(v).OutgoingHalfEdge);
+        Assert.Equal(he, mesh.Vertices[v].OutgoingHalfEdge);
     }
 
     [Fact]

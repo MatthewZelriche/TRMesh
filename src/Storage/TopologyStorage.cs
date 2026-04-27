@@ -9,10 +9,9 @@ namespace TREditorSharp.Storage;
 ///
 /// Storage is dense and swap-packed: every registered column has the live entities'
 /// data laid out contiguously in <c>[0, LiveCount)</c>, in the dense order tracked
-/// by the underlying <see cref="SparseSet{TTag}"/>. Use <see cref="GetDenseIndex"/>
-/// (and each column's indexer for writes), or <see cref="GetComponent{T}"/> /
-/// <see cref="GetComponent{T, TColumnTag}"/> for read-by-value convenience. The dense
-/// index of a given handle may change whenever a later-allocated entity is freed.
+/// by the underlying <see cref="SparseSet{TTag}"/>. Use array indexer to access connectivity
+/// by value. You may also use <see cref="GetUnsafeRef{T, TColumnTag}"/> to access component data
+/// without copying, but you must be careful with the lifetime of the reference.
 ///
 /// Extra columns are <see cref="NativeColumn{T}"/> instances, keyed by an optional tag type
 /// to distinguish multiple columns of the same element type. Implementations of
@@ -29,7 +28,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
 {
     private readonly SlotPool<TTag> _pool;
     private readonly NativeColumn<TConnectivity> _connectivity;
-    private readonly Dictionary<Type, IComponentColumn> _columnsByTag = new();
+    private readonly Dictionary<Type, IComponentColumn> _columnsByTag = [];
     private bool _disposed;
 
     public TopologyStorage()
@@ -39,19 +38,6 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         // Connectivity column is implicitly tagged by its own element type.
         _columnsByTag[typeof(TConnectivity)] = _connectivity;
         _pool.RegisterColumn(_connectivity);
-    }
-
-    /// <summary>
-    /// The connectivity column, backed by 64-byte-aligned native memory.
-    /// Direct pointer access for unsafe-fast bulk ops; lifetime is owned by
-    /// this storage and released on <see cref="Dispose"/>.
-    ///
-    /// Indices into the column are <em>dense</em> indices, not handle indices.
-    /// </summary>
-    public NativeColumn<TConnectivity> Connectivity
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _connectivity;
     }
 
     /// <summary>Number of currently live entities.</summary>
@@ -83,27 +69,49 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     public int GetDenseIndex(Handle<TTag> handle) => _pool.GetDenseIndex(handle);
 
     /// <summary>
-    /// Read the connectivity record for <paramref name="handle"/> (by value).
-    /// For read-modify-write, load with this method, mutate the struct, then call
-    /// <see cref="SetConnectivity"/>. Alternatively assign through
-    /// <see cref="Connectivity"/>[<see cref="GetDenseIndex"/>(handle)].
+    /// Connectivity accessor by handle.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public TConnectivity GetConnectivity(Handle<TTag> handle)
+    public TConnectivity this[Handle<TTag> handle]
     {
-        _pool.ValidateLive(handle);
-        return _connectivity[_pool.GetDenseIndex(handle)];
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get
+        {
+            _pool.ValidateLive(handle);
+            return _connectivity[_pool.GetDenseIndex(handle)];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        set
+        {
+            _pool.ValidateLive(handle);
+            _connectivity[_pool.GetDenseIndex(handle)] = value;
+        }
     }
 
     /// <summary>
-    /// Write the connectivity record for <paramref name="handle"/> (for example after
-    /// read-modify-write on a copy from <see cref="GetConnectivity"/>).
+    /// <para>
+    /// Zero-copy <see cref="ref"/> into the native column that stores <typeparamref name="T"/>
+    /// under tag <typeparamref name="TColumnTag"/> (see <see cref="GetNativeColumn{T, TColumnTag}"/>).
+    /// Prefer the handle indexer or <see cref="GetComponent{T, TColumnTag}"/> when by-value access is acceptable.
+    /// </para>
+    /// <para>
+    /// <b>Unsafe lifetime:</b> the returned reference aliases native storage. It is valid only while
+    /// no operation on this storage adds, removes, or reorders live entities in a way that touches
+    /// this column — specifically: do not call <see cref="Allocate"/>, <see cref="Free"/>,
+    /// or <see cref="Clear"/> on this <see cref="TopologyStorage{TTag,TConnectivity}"/> (or on any
+    /// facade that forwards to it) until you are finished using the reference. Do not
+    /// <see cref="IDisposable.Dispose"/> the storage while the reference is in use.
+    /// </para>
+    /// <para>
+    /// For column-local operations that also invalidate refs (buffer moves, swap-remove, etc.),
+    /// see <see cref="NativeColumn{T}.UnsafeRef"/>.
+    /// </para>
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetConnectivity(Handle<TTag> handle, TConnectivity value)
+    public ref T GetUnsafeRef<T, TColumnTag>(Handle<TTag> handle)
+        where T : unmanaged
     {
         _pool.ValidateLive(handle);
-        _connectivity[_pool.GetDenseIndex(handle)] = value;
+        return ref GetNativeColumn<T, TColumnTag>().UnsafeRef(_pool.GetDenseIndex(handle));
     }
 
     /// <summary>
@@ -117,6 +125,14 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         where T : unmanaged => GetComponent<T, T>(handle);
 
     /// <summary>
+    /// Write the component of element type <typeparamref name="T"/> for
+    /// <paramref name="handle"/> into the column tagged by its own element type.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetComponent<T>(Handle<TTag> handle, T value)
+        where T : unmanaged => SetComponent<T, T>(handle, value);
+
+    /// <summary>
     /// Read the component of element type <typeparamref name="T"/> from the column
     /// tagged <typeparamref name="TColumnTag"/>. For writes, assign through
     /// <see cref="GetNativeColumn{T, TColumnTag}"/>()[<see cref="GetDenseIndex"/>(handle)].
@@ -127,6 +143,18 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     {
         _pool.ValidateLive(handle);
         return GetNativeColumn<T, TColumnTag>()[_pool.GetDenseIndex(handle)];
+    }
+
+    /// <summary>
+    /// Write the component of element type <typeparamref name="T"/> for <paramref name="handle"/>
+    /// into the column tagged <typeparamref name="TColumnTag"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetComponent<T, TColumnTag>(Handle<TTag> handle, T value)
+        where T : unmanaged
+    {
+        _pool.ValidateLive(handle);
+        GetNativeColumn<T, TColumnTag>()[_pool.GetDenseIndex(handle)] = value;
     }
 
     /// <summary>
