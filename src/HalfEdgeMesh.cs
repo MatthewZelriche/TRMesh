@@ -17,19 +17,29 @@ using TREditorSharp.Storage;
 /// </summary>
 public partial class HalfEdgeMesh : IDisposable
 {
-    public TopologyStorage<VertexTag, Vertex> Vertices { get; }
+    private readonly TopologyStorage<VertexTag, Vertex> _vertices;
+    private readonly TopologyStorage<HalfEdgeTag, HalfEdge> _halfEdges;
+    private readonly TopologyStorage<FaceTag, Face> _faces;
 
-    public TopologyStorage<HalfEdgeTag, HalfEdge> HalfEdges { get; }
+    /// <summary>
+    /// Vertex topology storage. <c>internal</c> so format writers and other in-assembly
+    /// code can read columns and dense indices; external assemblies use public mesh APIs only.
+    /// </summary>
+    internal TopologyStorage<VertexTag, Vertex> Vertices => _vertices;
 
-    public TopologyStorage<FaceTag, Face> Faces { get; }
+    /// <summary>Half-edge topology storage. See <see cref="Vertices"/>.</summary>
+    internal TopologyStorage<HalfEdgeTag, HalfEdge> HalfEdges => _halfEdges;
+
+    /// <summary>Face topology storage. See <see cref="Vertices"/>.</summary>
+    internal TopologyStorage<FaceTag, Face> Faces => _faces;
 
     private bool _disposed;
 
     public HalfEdgeMesh()
     {
-        Vertices = new TopologyStorage<VertexTag, Vertex>();
-        HalfEdges = new TopologyStorage<HalfEdgeTag, HalfEdge>();
-        Faces = new TopologyStorage<FaceTag, Face>();
+        _vertices = new TopologyStorage<VertexTag, Vertex>();
+        _halfEdges = new TopologyStorage<HalfEdgeTag, HalfEdge>();
+        _faces = new TopologyStorage<FaceTag, Face>();
     }
 
     /// <summary>
@@ -37,9 +47,9 @@ public partial class HalfEdgeMesh : IDisposable
     /// </summary>
     public void Clear()
     {
-        Vertices.Clear();
-        HalfEdges.Clear();
-        Faces.Clear();
+        _vertices.Clear();
+        _halfEdges.Clear();
+        _faces.Clear();
     }
 
     public void Dispose()
@@ -47,9 +57,9 @@ public partial class HalfEdgeMesh : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        Vertices.Dispose();
-        HalfEdges.Dispose();
-        Faces.Dispose();
+        _vertices.Dispose();
+        _halfEdges.Dispose();
+        _faces.Dispose();
         GC.SuppressFinalize(this);
     }
 
