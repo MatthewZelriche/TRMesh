@@ -164,51 +164,63 @@ public partial class HalfEdgeMesh : IDisposable
         // Faces store any arbitrary half-edge adjacent to it.
         Faces.GetUnsafeRef<Face, Face>(faceHandle).FirstHalfEdge = hedges[0];
 
-        // Pointer linking phase. Stitch the new face's half-edges into a closed
-        // interior loop and splice their twins into the surrounding boundary.
+        // Cache the OLD boundary Prev/Next of every existing (promoted) half-edge before the
+        // linking phase begins, since the linking phase will overwrite those fields with
+        // interior values.
+        // TODO: I feel like we are starting to push the boundaries of what is reasonable when it
+        // comes to the use of stackalloc.
+        Span<HalfEdgeHandle> oldPrev = stackalloc HalfEdgeHandle[vertices.Length];
+        Span<HalfEdgeHandle> oldNext = stackalloc HalfEdgeHandle[vertices.Length];
         for (int i = 0; i < vertices.Length; i++)
         {
+            if (existingHandles[i].IsNull)
+                continue;
+            ref var existingHe = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(existingHandles[i]);
+            oldPrev[i] = existingHe.Prev;
+            oldNext[i] = existingHe.Next;
+        }
+
+        // Pointer linking phase. Stitch the new face's half-edges into a closed
+        // interior loop and splice their twins into the surrounding boundary.
+        // At each corner V_{i+1}, we identify the boundary half-edge that arrives at
+        // V_{i+1} ("incoming") and the one that leaves V_{i+1} ("outgoing"), then link
+        // them. Whether incoming/outgoing are old boundary halves or freshly created
+        // twins depends on whether the current/next edge of the new face already existed.
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            int iNext = (i + 1) % vertices.Length;
             var heHandle = hedges[i];
-            var heNextHandle = hedges[(i + 1) % vertices.Length];
+            var heNextHandle = hedges[iNext];
 
-            // Cache refs once. Safe: this loop performs no allocation, free, or
-            // clear, so the backing storage cannot move under us.
-            ref var he = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heHandle);
-            ref var heTwin = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(he.Twin);
-            ref var heNext = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heNextHandle);
-            ref var heNextTwin = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heNext.Twin);
-
-            var curr = existingHandles[i];
-            var next = existingHandles[(i + 1) % vertices.Length];
-
-            // Boundary-side ("exterior")splicing. The boundary loop traverses opposite to the
-            // interior, so heTwin's predecessor on the boundary is heNextTwin.
-            // Again, it is safe to skip the alive checks here.
-            if (!next.IsNull)
+            // Cache the twin handles (and existence flags) up front, since the boundary
+            // update may overwrite he.Twin / heNext.Twin's Prev/Next fields.
+            HalfEdgeHandle heTwinHandle;
+            HalfEdgeHandle heNextTwinHandle;
             {
-                // The next interior edge already existed; its boundary partner had
-                // a Prev pointing into the surrounding mesh. Reroute that Prev's
-                // Next through our new heTwin and inherit it as heTwin.Prev.
-                HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heNext.Prev).Next = he.Twin;
-                heTwin.Prev = heNext.Prev;
-            }
-            else if (!curr.IsNull)
-            {
-                // The current interior edge already existed; splice the existing
-                // Next chain onto the brand-new heNextTwin.
-                heNextTwin.Next = he.Next;
-                HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(he.Next).Prev = heNext.Twin;
-            }
-            else
-            {
-                // Both edges are brand new; just link the boundary twins together.
-                heTwin.Prev = heNext.Twin;
-                heNextTwin.Next = he.Twin;
+                ref var he = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heHandle);
+                heTwinHandle = he.Twin;
+                ref var heNext = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heNextHandle);
+                heNextTwinHandle = heNext.Twin;
             }
 
-            // Interior setup is straightforward, just linking together the half-edges in sequence.
-            he.Next = heNextHandle;
-            heNext.Prev = heHandle;
+            bool currExisted = !existingHandles[i].IsNull;
+            bool nextExisted = !existingHandles[iNext].IsNull;
+
+            // Outgoing from V_{i+1}: heA.Next_old if heA existed, else heA.Twin (new boundary).
+            HalfEdgeHandle outgoing = currExisted ? oldNext[i] : heTwinHandle;
+            // Incoming to V_{i+1}: heB.Prev_old if heB existed, else heB.Twin (new boundary).
+            HalfEdgeHandle incoming = nextExisted ? oldPrev[iNext] : heNextTwinHandle;
+
+            HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(incoming).Next = outgoing;
+            HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(outgoing).Prev = incoming;
+
+            // Interior linking: the new face's interior loop runs CCW through hedges[].
+            // (Safe to overwrite even after the boundary update above, since for the
+            // both-existed adjacent case the boundary update wrote the same values.)
+            ref var heW = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heHandle);
+            ref var heNextW = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heNextHandle);
+            heW.Next = heNextHandle;
+            heNextW.Prev = heHandle;
         }
 
         // Let out a sigh of relief, all that hard work is done!
