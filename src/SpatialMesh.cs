@@ -17,10 +17,14 @@ public class SpatialMesh : HalfEdgeMesh
         VertexPositions = Vertices.RegisterNativeColumn<Vector3, VertexPositionTag>();
     }
 
-    public void AddVertex(Vector3 position)
+    /// <summary>
+    /// Allocate a fresh vertex with <paramref name="position"/> and return its handle.
+    /// </summary>
+    public VertexHandle AddVertex(Vector3 position)
     {
         var v = Vertices.Allocate();
         VertexPositions[Vertices.GetDenseIndex(v)] = position;
+        return v;
     }
 
     /// <summary>
