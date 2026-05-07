@@ -33,6 +33,20 @@ public partial class HalfEdgeMesh : IDisposable
     /// <summary>Face topology storage. See <see cref="Vertices"/>.</summary>
     internal TopologyStorage<FaceTag, Face> Faces => _faces;
 
+    /// <summary>Stack-only iteration of live <see cref="FaceHandle"/> values in unspecified order.</summary>
+    public TopologyStorage<FaceTag, Face>.LiveHandleEnumerable EnumerateLiveFaces() => _faces.Live;
+
+    /// <summary>Stack-only iteration of live <see cref="VertexHandle"/> values in unspecified order.</summary>
+    public TopologyStorage<VertexTag, Vertex>.LiveHandleEnumerable EnumerateLiveVertices() =>
+        _vertices.Live;
+
+    /// <summary>Stack-only iteration of live <see cref="HalfEdgeHandle"/> values in unspecified order.</summary>
+    public TopologyStorage<HalfEdgeTag, HalfEdge>.LiveHandleEnumerable EnumerateLiveHalfEdges() =>
+        _halfEdges.Live;
+
+    /// <summary>Connectivity read for <paramref name="handle"/>; throws if not live.</summary>
+    public HalfEdge GetHalfEdge(HalfEdgeHandle handle) => _halfEdges[handle];
+
     private bool _disposed;
 
     public HalfEdgeMesh()

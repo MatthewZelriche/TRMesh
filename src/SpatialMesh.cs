@@ -27,6 +27,15 @@ public class SpatialMesh : HalfEdgeMesh
         return v;
     }
 
+    /// <summary>World-space position for a live vertex.</summary>
+    public Vector3 GetVertexPosition(VertexHandle vertex) =>
+        VertexPositions[Vertices.GetDenseIndex(vertex)];
+
+    /// <summary>
+    /// Position by dense vertex index (as produced by <see cref="TriangulateFace"/> index output).
+    /// </summary>
+    public Vector3 GetVertexPositionByDenseIndex(int denseIndex) => VertexPositions[denseIndex];
+
     /// <summary>
     /// Triangulate <paramref name="face"/> into triangles using ear clipping
     /// and append <c>(n - 2) * 3</c> dense vertex indices to <paramref name="output"/>,
