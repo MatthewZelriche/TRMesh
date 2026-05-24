@@ -225,6 +225,8 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     /// <summary>Reset the storage to empty without releasing buffers.</summary>
     public void Clear() => _pool.Clear();
 
+    internal Span<TConnectivity> ConnectivitySpan => _connectivity.AsSpan();
+
     /// <summary>Iterate live entity handles in unspecified order. Stack-allocated; never allocates.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public LiveHandleEnumerator GetEnumerator() => new(_pool);
