@@ -15,8 +15,11 @@ public readonly struct CylinderOptions
     /// <summary>Center of the cylinder (midpoint between the two cap centers).</summary>
     public Vector3 Center { get; init; }
 
-    /// <summary>Cap radius. Must be strictly positive.</summary>
-    public float Radius { get; init; }
+    /// <summary>Cap radius along +X. Must be strictly positive.</summary>
+    public float RadiusX { get; init; }
+
+    /// <summary>Cap radius along +Z. Must be strictly positive.</summary>
+    public float RadiusZ { get; init; }
 
     /// <summary>Distance between the two cap centers along +Y. Must be strictly positive.</summary>
     public float Height { get; init; }

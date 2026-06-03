@@ -31,21 +31,40 @@ public class BuilderRoundTripTests
         new()
         {
             Center = Vector3.Zero,
-            Radius = 1f,
+            RadiusX = 1f,
+            RadiusZ = 1f,
             Height = 2f,
             RadialSegments = 3,
         },
         new()
         {
             Center = Vector3.Zero,
-            Radius = 1f,
+            RadiusX = 1f,
+            RadiusZ = 1f,
             Height = 2f,
             RadialSegments = 8,
         },
         new()
         {
             Center = new Vector3(5, -1, 2),
-            Radius = 0.5f,
+            RadiusX = 0.5f,
+            RadiusZ = 0.5f,
+            Height = 4f,
+            RadialSegments = 32,
+        },
+        new()
+        {
+            Center = Vector3.Zero,
+            RadiusX = 1f,
+            RadiusZ = 2f,
+            Height = 2f,
+            RadialSegments = 4,
+        },
+        new()
+        {
+            Center = new Vector3(5, -1, 2),
+            RadiusX = 0.5f,
+            RadiusZ = 1.5f,
             Height = 4f,
             RadialSegments = 32,
         },

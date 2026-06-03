@@ -57,8 +57,10 @@ public static class MeshBuilders
     /// </summary>
     public static SpatialMesh Build(in CylinderOptions options)
     {
-        if (!(options.Radius > 0f))
-            throw new ArgumentException("CylinderOptions.Radius must be > 0.", nameof(options));
+        if (!(options.RadiusX > 0f))
+            throw new ArgumentException("CylinderOptions.RadiusX must be > 0.", nameof(options));
+        if (!(options.RadiusZ > 0f))
+            throw new ArgumentException("CylinderOptions.RadiusZ must be > 0.", nameof(options));
         if (!(options.Height > 0f))
             throw new ArgumentException("CylinderOptions.Height must be > 0.", nameof(options));
         if (options.RadialSegments < 3)
@@ -68,7 +70,8 @@ public static class MeshBuilders
             );
 
         int n = options.RadialSegments;
-        float r = options.Radius;
+        float radiusX = options.RadiusX;
+        float radiusZ = options.RadiusZ;
         float halfH = options.Height * 0.5f;
         var c = options.Center;
 
@@ -80,15 +83,15 @@ public static class MeshBuilders
         for (int i = 0; i < n; i++)
         {
             double angle = 2.0 * Math.PI * i / n;
-            float cx = (float)Math.Cos(angle) * r;
-            float cz = (float)Math.Sin(angle) * r;
+            float cx = (float)Math.Cos(angle) * radiusX;
+            float cz = (float)Math.Sin(angle) * radiusZ;
             bottom[i] = mesh.AddVertex(new Vector3(c.X + cx, c.Y - halfH, c.Z + cz));
         }
         for (int i = 0; i < n; i++)
         {
             double angle = 2.0 * Math.PI * i / n;
-            float cx = (float)Math.Cos(angle) * r;
-            float cz = (float)Math.Sin(angle) * r;
+            float cx = (float)Math.Cos(angle) * radiusX;
+            float cz = (float)Math.Sin(angle) * radiusZ;
             top[i] = mesh.AddVertex(new Vector3(c.X + cx, c.Y + halfH, c.Z + cz));
         }
 
