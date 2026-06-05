@@ -31,6 +31,10 @@ public class SpatialMesh : HalfEdgeMesh
     public Vector3 GetVertexPosition(VertexHandle vertex) =>
         VertexPositions[Vertices.GetDenseIndex(vertex)];
 
+    /// <summary>Set the position for a live vertex.</summary>
+    public void SetVertexPosition(VertexHandle vertex, Vector3 position) =>
+        VertexPositions[Vertices.GetDenseIndex(vertex)] = position;
+
     /// <summary>
     /// Position by dense vertex index (as produced by <see cref="TriangulateFace"/> index output).
     /// </summary>
