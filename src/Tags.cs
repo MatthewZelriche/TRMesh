@@ -19,3 +19,13 @@ public readonly struct FaceTag { }
 /// can have multiple <c>Vector3</c> columns (position, normal, etc.) without ambiguity.
 /// </summary>
 public readonly struct VertexPositionTag { }
+
+/// <summary>
+/// Phantom marker for a face-corner UV component column stored on half-edges.
+/// </summary>
+public readonly struct FaceCornerUvTag { }
+
+/// <summary>
+/// Phantom marker for a packed texture-state component column stored on faces.
+/// </summary>
+public readonly struct FaceTextureStateTag { }

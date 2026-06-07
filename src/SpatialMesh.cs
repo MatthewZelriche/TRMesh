@@ -9,12 +9,21 @@ using TREditorSharp.Storage;
 /// </summary>
 public class SpatialMesh : HalfEdgeMesh
 {
+    public const int UntexturedMaterialSlot = 0;
+
+    private const uint UvsInitializedMask = 1u << 31;
+    private const uint MaterialSlotMask = ~UvsInitializedMask;
+
     private NativeColumn<Vector3> VertexPositions { get; }
+    private NativeColumn<Vector2> FaceCornerUvs { get; }
+    private NativeColumn<uint> FaceTextureStates { get; }
 
     public SpatialMesh()
         : base()
     {
         VertexPositions = Vertices.RegisterNativeColumn<Vector3, VertexPositionTag>();
+        FaceCornerUvs = HalfEdges.RegisterNativeColumn<Vector2, FaceCornerUvTag>();
+        FaceTextureStates = Faces.RegisterNativeColumn<uint, FaceTextureStateTag>();
     }
 
     /// <summary>
@@ -37,6 +46,51 @@ public class SpatialMesh : HalfEdgeMesh
 
     /// <summary>Position by dense vertex index.</summary>
     public Vector3 GetVertexPositionByDenseIndex(int denseIndex) => VertexPositions[denseIndex];
+
+    /// <summary>UV coordinate belonging to one polygon face corner.</summary>
+    public Vector2 GetFaceCornerUv(FaceCornerHandle corner)
+    {
+        ValidateFaceCorner(corner);
+        return FaceCornerUvs[HalfEdges.GetDenseIndex(corner)];
+    }
+
+    /// <summary>Set the UV coordinate belonging to one polygon face corner.</summary>
+    public void SetFaceCornerUv(FaceCornerHandle corner, Vector2 uv)
+    {
+        ValidateFaceCorner(corner);
+        FaceCornerUvs[HalfEdges.GetDenseIndex(corner)] = uv;
+    }
+
+    /// <summary>
+    /// Material slot assigned to a polygon face. Slot <see cref="UntexturedMaterialSlot"/>
+    /// represents an untextured face.
+    /// </summary>
+    public int GetFaceMaterialSlot(FaceHandle face) =>
+        (int)(FaceTextureStates[Faces.GetDenseIndex(face)] & MaterialSlotMask);
+
+    /// <summary>Assign a non-negative material slot to a polygon face.</summary>
+    public void SetFaceMaterialSlot(FaceHandle face, int materialSlot)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(materialSlot);
+        int denseIndex = Faces.GetDenseIndex(face);
+        uint state = FaceTextureStates[denseIndex];
+        FaceTextureStates[denseIndex] =
+            (state & UvsInitializedMask) | ((uint)materialSlot & MaterialSlotMask);
+    }
+
+    /// <summary>Whether a polygon face has explicitly initialized corner UVs.</summary>
+    public bool AreFaceUvsInitialized(FaceHandle face) =>
+        (FaceTextureStates[Faces.GetDenseIndex(face)] & UvsInitializedMask) != 0;
+
+    /// <summary>Set whether a polygon face has explicitly initialized corner UVs.</summary>
+    public void SetFaceUvsInitialized(FaceHandle face, bool initialized)
+    {
+        int denseIndex = Faces.GetDenseIndex(face);
+        uint state = FaceTextureStates[denseIndex];
+        FaceTextureStates[denseIndex] = initialized
+            ? state | UvsInitializedMask
+            : state & ~UvsInitializedMask;
+    }
 
     /// <summary>
     /// Triangulate <paramref name="face"/> into triangles using ear clipping
@@ -247,5 +301,17 @@ public class SpatialMesh : HalfEdgeMesh
         var s2 = Vector3.Dot(Vector3.Cross(c - b, p - b), normal);
         var s3 = Vector3.Dot(Vector3.Cross(a - c, p - c), normal);
         return (s1 >= 0f && s2 >= 0f && s3 >= 0f) || (s1 <= 0f && s2 <= 0f && s3 <= 0f);
+    }
+
+    private void ValidateFaceCorner(FaceCornerHandle corner)
+    {
+        HalfEdge halfEdge = HalfEdges[corner];
+        if (halfEdge.Face.IsNull)
+        {
+            throw new ArgumentException(
+                $"Half-edge {corner} is a boundary edge and does not represent a face corner.",
+                nameof(corner)
+            );
+        }
     }
 }
