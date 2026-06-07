@@ -40,7 +40,7 @@ public sealed class BinaryMeshSerializationTests
 
         var options = new BinaryMeshSerializerOptions();
         options.Columns.Add(
-            BinaryMeshColumnDescriptor.Create<VertexTag, int, VertexWeightTag>(
+            BinaryMeshColumnDescriptor.Create<int, VertexWeightTag>(
                 BinaryMeshEntityKind.Vertex,
                 "test.vertex.weight.v1"
             )
@@ -97,9 +97,9 @@ public sealed class BinaryMeshSerializationTests
         using var mesh = new HalfEdgeMesh();
         var options = new BinaryMeshSerializerOptions();
         options.Columns.Add(
-            BinaryMeshColumnDescriptor.Create<VertexTag, int, VertexWeightTag>(
-                BinaryMeshEntityKind.Vertex,
-                "test.vertex.required-weight.v1",
+            BinaryMeshColumnDescriptor.Create<int, VertexWeightTag>(
+                BinaryMeshEntityKind.Face,
+                "test.face.required-weight.v1",
                 isRequired: true
             )
         );
@@ -109,6 +109,18 @@ public sealed class BinaryMeshSerializationTests
         Assert.Throws<InvalidOperationException>(() =>
             new BinaryMeshWriter().Write(mesh, stream, options)
         );
+        Assert.Equal(0, stream.Length);
+    }
+
+    [Fact]
+    public void Write_RejectsInvalidTopologyBeforeWriting()
+    {
+        using var mesh = new HalfEdgeMesh();
+        mesh.HalfEdges.Allocate();
+        using var stream = new MemoryStream();
+
+        Assert.Throws<InvalidOperationException>(() => new BinaryMeshWriter().Write(mesh, stream));
+        Assert.Equal(0, stream.Length);
     }
 
     static void AssertSemanticTopology(HalfEdgeMesh expected, HalfEdgeMesh actual)

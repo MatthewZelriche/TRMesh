@@ -18,7 +18,7 @@ namespace TREditorSharp.IO;
 /// uses the file's column id to find the matching descriptor, creates the storage column when
 /// needed, and decodes elements in the section's dense file order.
 ///
-/// Use <see cref="Create{TEntityTag, TValue, TColumnTag}(BinaryMeshEntityKind, string, bool)"/> for
+/// Use <see cref="Create{TValue, TColumnTag}(BinaryMeshEntityKind, string, bool)"/> for
 /// unmanaged values that can be written as their native in-memory bytes. Use the overload with
 /// explicit read/write delegates when the file representation should be stable across runtimes,
 /// platforms, or future struct layout changes.
@@ -51,14 +51,13 @@ public abstract class BinaryMeshColumnDescriptor
 
     public bool IsRequired { get; }
 
-    public static BinaryMeshColumnDescriptor Create<TEntityTag, TValue, TColumnTag>(
+    public static BinaryMeshColumnDescriptor Create<TValue, TColumnTag>(
         BinaryMeshEntityKind entityKind,
         string columnId,
         bool isRequired = false
     )
-        where TEntityTag : unmanaged
         where TValue : unmanaged =>
-        new NativeBinaryMeshColumnDescriptor<TEntityTag, TValue, TColumnTag>(
+        new NativeBinaryMeshColumnDescriptor<TValue, TColumnTag>(
             entityKind,
             columnId,
             Unsafe.SizeOf<TValue>(),
@@ -67,7 +66,7 @@ public abstract class BinaryMeshColumnDescriptor
             readElement: null
         );
 
-    public static BinaryMeshColumnDescriptor Create<TEntityTag, TValue, TColumnTag>(
+    public static BinaryMeshColumnDescriptor Create<TValue, TColumnTag>(
         BinaryMeshEntityKind entityKind,
         string columnId,
         int elementSize,
@@ -75,9 +74,8 @@ public abstract class BinaryMeshColumnDescriptor
         BinaryMeshReadElement<TValue> readElement,
         bool isRequired = false
     )
-        where TEntityTag : unmanaged
         where TValue : unmanaged =>
-        new NativeBinaryMeshColumnDescriptor<TEntityTag, TValue, TColumnTag>(
+        new NativeBinaryMeshColumnDescriptor<TValue, TColumnTag>(
             entityKind,
             columnId,
             elementSize,
@@ -95,9 +93,7 @@ public abstract class BinaryMeshColumnDescriptor
     internal abstract void ReadPayload(HalfEdgeMesh mesh, Stream source, int count);
 }
 
-sealed class NativeBinaryMeshColumnDescriptor<TEntityTag, TValue, TColumnTag>
-    : BinaryMeshColumnDescriptor
-    where TEntityTag : unmanaged
+sealed class NativeBinaryMeshColumnDescriptor<TValue, TColumnTag> : BinaryMeshColumnDescriptor
     where TValue : unmanaged
 {
     readonly BinaryMeshWriteElement<TValue>? _writeElement;

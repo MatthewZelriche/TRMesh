@@ -19,6 +19,8 @@ public sealed class BinaryMeshWriter
 
         var opts = options ?? BinaryMeshSerializerOptions.Default;
         ValidateDescriptors(opts);
+        ValidateRequiredColumns(mesh, opts);
+        mesh.ValidateConsistency();
 
         var vertexRefs = BuildReferenceTable(mesh.Vertices);
         var halfEdgeRefs = BuildReferenceTable(mesh.HalfEdges);
@@ -145,18 +147,6 @@ public sealed class BinaryMeshWriter
         int liveCount
     )
     {
-        foreach (
-            var required in options.Columns.Where(column =>
-                column.EntityKind == kind && column.IsRequired
-            )
-        )
-        {
-            if (!required.IsAvailable(mesh))
-                throw new InvalidOperationException(
-                    $"Required binary mesh column '{required.ColumnId}' is not registered on {kind} storage."
-                );
-        }
-
         var columns = options
             .Columns.Where(column => column.EntityKind == kind && column.IsAvailable(mesh))
             .ToArray();
@@ -178,6 +168,17 @@ public sealed class BinaryMeshWriter
             if (!seen.Add(column.ColumnId))
                 throw new InvalidOperationException(
                     $"Duplicate binary mesh column descriptor '{column.ColumnId}'."
+                );
+        }
+    }
+
+    static void ValidateRequiredColumns(HalfEdgeMesh mesh, BinaryMeshSerializerOptions options)
+    {
+        foreach (var required in options.Columns.Where(column => column.IsRequired))
+        {
+            if (!required.IsAvailable(mesh))
+                throw new InvalidOperationException(
+                    $"Required binary mesh column '{required.ColumnId}' is not registered on {required.EntityKind} storage."
                 );
         }
     }

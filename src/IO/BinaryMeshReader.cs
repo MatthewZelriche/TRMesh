@@ -12,7 +12,7 @@ public sealed class BinaryMeshReader
         var mesh = new HalfEdgeMesh();
         try
         {
-            ReadInto(mesh, source, options);
+            Populate(mesh, source, options);
             return mesh;
         }
         catch
@@ -28,7 +28,7 @@ public sealed class BinaryMeshReader
         var mesh = new SpatialMesh();
         try
         {
-            ReadInto(mesh, source, options);
+            Populate(mesh, source, options);
             return mesh;
         }
         catch
@@ -38,16 +38,12 @@ public sealed class BinaryMeshReader
         }
     }
 
-    public void ReadInto(
+    static void Populate(
         HalfEdgeMesh mesh,
         Stream source,
         BinaryMeshSerializerOptions? options = null
     )
     {
-        ArgumentNullException.ThrowIfNull(mesh);
-        ArgumentNullException.ThrowIfNull(source);
-
-        mesh.Clear();
         var opts = options ?? BinaryMeshSerializerOptions.Default;
         var descriptors = BuildDescriptorMap(opts);
 
@@ -130,7 +126,7 @@ public sealed class BinaryMeshReader
         return new HalfEdgeSection(handles, records);
     }
 
-    void ReadFacesAndPatchConnectivity(
+    static void ReadFacesAndPatchConnectivity(
         HalfEdgeMesh mesh,
         Stream source,
         BinaryMeshSerializerOptions options,

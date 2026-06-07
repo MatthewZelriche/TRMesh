@@ -88,7 +88,7 @@ public static class BinaryMeshColumnDescriptors
     /// 32-bit floats.
     /// </summary>
     public static BinaryMeshColumnDescriptor VertexPositions { get; } =
-        BinaryMeshColumnDescriptor.Create<VertexTag, Vector3, VertexPositionTag>(
+        BinaryMeshColumnDescriptor.Create<Vector3, VertexPositionTag>(
             BinaryMeshEntityKind.Vertex,
             "trmesh.vertex.position.v1",
             12,
