@@ -19,6 +19,14 @@ static class BinaryMeshPrimitives
         return BinaryPrimitives.ReadInt32LittleEndian(buffer);
     }
 
+    public static void WriteUInt32(Span<byte> destination, uint value)
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(destination, value);
+    }
+
+    public static uint ReadUInt32(ReadOnlySpan<byte> source) =>
+        BinaryPrimitives.ReadUInt32LittleEndian(source);
+
     public static void WriteInt64(Stream destination, long value)
     {
         Span<byte> buffer = stackalloc byte[8];
@@ -57,5 +65,4 @@ static class BinaryMeshPrimitives
         source.ReadExactly(bytes);
         return Encoding.UTF8.GetString(bytes);
     }
-
 }

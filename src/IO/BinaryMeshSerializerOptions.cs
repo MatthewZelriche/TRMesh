@@ -20,15 +20,17 @@ public sealed class BinaryMeshSerializerOptions
     readonly List<BinaryMeshColumnDescriptor> _columns = [];
 
     /// <summary>
-    /// Creates options with the built-in spatial vertex position descriptor registered.
+    /// Creates options with the built-in spatial-mesh descriptors registered.
     /// </summary>
     /// <remarks>
-    /// The position descriptor is only written when the mesh actually has a
-    /// <see cref="VertexPositionTag"/> column, such as on <see cref="SpatialMesh"/>.
+    /// Each descriptor is only written when the mesh actually has its matching column, such as
+    /// the position, face-corner UV, and face texture-state columns on <see cref="SpatialMesh"/>.
     /// </remarks>
     public BinaryMeshSerializerOptions()
     {
         _columns.Add(BinaryMeshColumnDescriptors.VertexPositions);
+        _columns.Add(BinaryMeshColumnDescriptors.FaceCornerUvs);
+        _columns.Add(BinaryMeshColumnDescriptors.FaceTextureStates);
     }
 
     /// <summary>
@@ -103,5 +105,39 @@ public static class BinaryMeshColumnDescriptors
                 BinaryMeshPrimitives.ReadSingle(source.Slice(4, 4)),
                 BinaryMeshPrimitives.ReadSingle(source.Slice(8, 4))
             )
+        );
+
+    /// <summary>
+    /// Face-corner UV column used by <see cref="SpatialMesh"/>, encoded as two little-endian
+    /// 32-bit floats.
+    /// </summary>
+    public static BinaryMeshColumnDescriptor FaceCornerUvs { get; } =
+        BinaryMeshColumnDescriptor.Create<Vector2, FaceCornerUvTag>(
+            BinaryMeshEntityKind.HalfEdge,
+            "trmesh.half-edge.face-corner-uv.v1",
+            8,
+            static (in Vector2 value, Span<byte> destination) =>
+            {
+                BinaryMeshPrimitives.WriteSingle(destination[..4], value.X);
+                BinaryMeshPrimitives.WriteSingle(destination.Slice(4, 4), value.Y);
+            },
+            static source => new Vector2(
+                BinaryMeshPrimitives.ReadSingle(source[..4]),
+                BinaryMeshPrimitives.ReadSingle(source.Slice(4, 4))
+            )
+        );
+
+    /// <summary>
+    /// Packed face texture-state column used by <see cref="SpatialMesh"/>, encoded as one
+    /// little-endian 32-bit unsigned integer.
+    /// </summary>
+    public static BinaryMeshColumnDescriptor FaceTextureStates { get; } =
+        BinaryMeshColumnDescriptor.Create<uint, FaceTextureStateTag>(
+            BinaryMeshEntityKind.Face,
+            "trmesh.face.texture-state.v1",
+            4,
+            static (in uint value, Span<byte> destination) =>
+                BinaryMeshPrimitives.WriteUInt32(destination, value),
+            static source => BinaryMeshPrimitives.ReadUInt32(source)
         );
 }

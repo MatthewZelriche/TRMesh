@@ -29,6 +29,50 @@ public sealed class BinaryMeshSerializationTests
     }
 
     [Fact]
+    public void SpatialMesh_RoundTripsExactTextureAttributes()
+    {
+        using var expected = MeshBuilders.Build(
+            new BlockOptions { Min = new Vector3(-1, -2, -3), Max = new Vector3(4, 5, 6) }
+        );
+        SetDistinctTextureAttributes(expected);
+
+        using var stream = new MemoryStream();
+        new BinaryMeshWriter().Write(expected, stream);
+        stream.Position = 0;
+
+        using var actual = new BinaryMeshReader().ReadSpatialMesh(stream);
+
+        AssertExactTextureAttributes(expected, actual);
+    }
+
+    [Fact]
+    public void SpatialMesh_OlderPositionOnlyFileLoadsDefaultTextureAttributes()
+    {
+        using var expected = MeshBuilders.Build(
+            new BlockOptions { Min = new Vector3(-1, -2, -3), Max = new Vector3(4, 5, 6) }
+        );
+        var legacyOptions = new BinaryMeshSerializerOptions();
+        legacyOptions.Columns.Clear();
+        legacyOptions.Columns.Add(BinaryMeshColumnDescriptors.VertexPositions);
+
+        using var stream = new MemoryStream();
+        new BinaryMeshWriter().Write(expected, stream, legacyOptions);
+        stream.Position = 0;
+
+        using var actual = new BinaryMeshReader().ReadSpatialMesh(stream);
+
+        foreach (FaceHandle face in actual.EnumerateLiveFaces())
+        {
+            Assert.Equal(SpatialMesh.UntexturedMaterialSlot, actual.GetFaceMaterialSlot(face));
+            Assert.False(actual.AreFaceUvsInitialized(face));
+            foreach (FaceCornerHandle corner in actual.HalfEdgesAroundFace(face))
+            {
+                Assert.Equal(Vector2.Zero, actual.GetFaceCornerUv(corner));
+            }
+        }
+    }
+
+    [Fact]
     public void GenericColumn_RoundTripsWhenDescriptorIsRegistered()
     {
         using var expected = new HalfEdgeMesh();
@@ -219,5 +263,52 @@ public sealed class BinaryMeshSerializationTests
         Assert.Equal(expectedPositions.Count, actualPositions.Count);
         for (int i = 0; i < expectedPositions.Count; i++)
             Assert.Equal(expectedPositions[i], actualPositions[i]);
+    }
+
+    static void SetDistinctTextureAttributes(SpatialMesh mesh)
+    {
+        int faceIndex = 0;
+        foreach (FaceHandle face in mesh.EnumerateLiveFaces())
+        {
+            mesh.SetFaceMaterialSlot(face, faceIndex + 1);
+            mesh.SetFaceUvsInitialized(face, faceIndex % 2 == 0);
+
+            int cornerIndex = 0;
+            foreach (FaceCornerHandle corner in mesh.HalfEdgesAroundFace(face))
+            {
+                mesh.SetFaceCornerUv(corner, new Vector2(faceIndex + 0.25f, cornerIndex + 0.5f));
+                cornerIndex++;
+            }
+            faceIndex++;
+        }
+    }
+
+    static void AssertExactTextureAttributes(SpatialMesh expected, SpatialMesh actual)
+    {
+        var expectedFaces = CollectHandles(expected.Faces);
+        var actualFaces = CollectHandles(actual.Faces);
+        for (int i = 0; i < expectedFaces.Count; i++)
+        {
+            Assert.Equal(
+                expected.GetFaceMaterialSlot(expectedFaces[i]),
+                actual.GetFaceMaterialSlot(actualFaces[i])
+            );
+            Assert.Equal(
+                expected.AreFaceUvsInitialized(expectedFaces[i]),
+                actual.AreFaceUvsInitialized(actualFaces[i])
+            );
+        }
+
+        var expectedCorners = CollectHandles(expected.HalfEdges);
+        var actualCorners = CollectHandles(actual.HalfEdges);
+        for (int i = 0; i < expectedCorners.Count; i++)
+        {
+            if (expected.GetHalfEdge(expectedCorners[i]).Face.IsNull)
+                continue;
+            Assert.Equal(
+                expected.GetFaceCornerUv(expectedCorners[i]),
+                actual.GetFaceCornerUv(actualCorners[i])
+            );
+        }
     }
 }
