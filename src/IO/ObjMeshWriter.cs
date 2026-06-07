@@ -62,7 +62,7 @@ public sealed class ObjMeshWriter
             writer.WriteLine(p.Z.ToString(FloatFormat, inv));
         }
 
-        var triScratch = new List<int>(256);
+        var triScratch = new List<FaceCornerHandle>(256);
         var cornerScratch = new List<int>(64);
 
         foreach (var face in faces.Live)
@@ -78,7 +78,13 @@ public sealed class ObjMeshWriter
 
                 for (int t = 0; t + 2 < triScratch.Count; t += 3)
                 {
-                    WriteFaceLine(writer, triScratch[t], triScratch[t + 1], triScratch[t + 2], inv);
+                    WriteFaceLine(
+                        writer,
+                        verts.GetDenseIndex(mesh.HalfEdges[triScratch[t]].Origin),
+                        verts.GetDenseIndex(mesh.HalfEdges[triScratch[t + 1]].Origin),
+                        verts.GetDenseIndex(mesh.HalfEdges[triScratch[t + 2]].Origin),
+                        inv
+                    );
                 }
             }
             else

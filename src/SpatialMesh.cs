@@ -35,23 +35,28 @@ public class SpatialMesh : HalfEdgeMesh
     public void SetVertexPosition(VertexHandle vertex, Vector3 position) =>
         VertexPositions[Vertices.GetDenseIndex(vertex)] = position;
 
-    /// <summary>
-    /// Position by dense vertex index (as produced by <see cref="TriangulateFace"/> index output).
-    /// </summary>
+    /// <summary>Position by dense vertex index.</summary>
     public Vector3 GetVertexPositionByDenseIndex(int denseIndex) => VertexPositions[denseIndex];
 
     /// <summary>
     /// Triangulate <paramref name="face"/> into triangles using ear clipping
-    /// and append <c>(n - 2) * 3</c> dense vertex indices to <paramref name="output"/>,
-    /// where <c>n</c> is the number of vertices around the face. Dense indices are
-    /// looked up via <see cref="TopologyStorage{TTag,TConnectivity}.GetDenseIndex"/>
-    /// on the vertex storage and are suitable for direct submission to a GPU index
-    /// buffer alongside the dense-ordered vertex position column.
+    /// and append <c>(n - 2) * 3</c> original face-corner handles to
+    /// <paramref name="output"/>, where <c>n</c> is the number of vertices around the face.
+    /// Each consecutive group of three handles describes one triangle in the face's CCW
+    /// winding. The handles remain owned by the original polygon face; triangulation does
+    /// not create or mutate topology.
+    ///
+    /// <para>
+    /// A <see cref="FaceCornerHandle"/> aliases the corner's existing
+    /// <see cref="HalfEdgeHandle"/>. This gives the corner a single canonical identity with
+    /// direct access to its origin, face, and neighbors; a vertex/face handle pair would be
+    /// larger and require walking the face loop to resolve the same half-edge.
+    /// </para>
     ///
     /// <para>
     /// Returns true on success. Returns false when any of the following hold;
     /// <paramref name="output"/> may have been partially appended in those cases and the caller
-    /// should treat any indices it added past the original <c>Count</c> as discarded:
+    /// should treat any corners it added past the original <c>Count</c> as discarded:
     /// <list type="bullet">
     ///   <item><description><paramref name="face"/> is dead (e.g. freed or never allocated).</description></item>
     ///   <item><description>The face has fewer than three vertices.</description></item>
@@ -61,18 +66,12 @@ public class SpatialMesh : HalfEdgeMesh
     /// </para>
     ///
     /// <para>
-    /// <b>Mutation contract:</b> the caller must not allocate, free, or clear vertices
-    /// (or otherwise reorder the dense layout of the vertex column or
-    /// <see cref="HalfEdges"/>) for the duration of this call. Doing so would invalidate
-    /// the dense indices and the cached <see cref="NativeColumn{T}.DataPtr"/> used here.
-    /// Additionally, the caller must not mutate vertex data for as long as they are using the output
-    /// indices, UNLESS they copy out the dense vertex data and clear the output list first.
-    /// TODO: Double check this comment is actually correct. It'll depend on exactly how
-    /// batching dirty faces is implemented.
+    /// <b>Mutation contract:</b> the caller must not mutate mesh topology or vertex positions
+    /// for the duration of this call. Returned handles remain valid according to the normal
+    /// generational-handle lifetime rules.
     /// </para>
     /// </summary>
-    // TODO: add unit tests for TriangulateFace
-    public bool TriangulateFace(FaceHandle face, List<int> output)
+    public bool TriangulateFace(FaceHandle face, List<FaceCornerHandle> output)
     {
         if (!Faces.IsAlive(face))
             return false;
@@ -90,11 +89,13 @@ public class SpatialMesh : HalfEdgeMesh
         if (count < 3)
             return false;
 
+        Span<FaceCornerHandle> corners = stackalloc FaceCornerHandle[count];
         Span<VertexHandle> verts = stackalloc VertexHandle[count];
         int filled = 0;
         foreach (var heHandle in HalfEdgesAroundFace(face))
         {
             ref var he = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(heHandle);
+            corners[filled] = heHandle;
             verts[filled++] = he.Origin;
         }
 
@@ -109,9 +110,9 @@ public class SpatialMesh : HalfEdgeMesh
         // Triangle fast path: skip normal/ear work entirely.
         if (count == 3)
         {
-            output.Add(denseIdx[0]);
-            output.Add(denseIdx[1]);
-            output.Add(denseIdx[2]);
+            output.Add(corners[0]);
+            output.Add(corners[1]);
+            output.Add(corners[2]);
             return true;
         }
 
@@ -200,9 +201,9 @@ public class SpatialMesh : HalfEdgeMesh
                 // Emit the ear in the polygon's CCW order, clip i from the ring,
                 // and resume next search at q since p and q are the only vertices
                 // whose neighborhoods just changed.
-                output.Add(denseIdx[p]);
-                output.Add(denseIdx[i]);
-                output.Add(denseIdx[q]);
+                output.Add(corners[p]);
+                output.Add(corners[i]);
+                output.Add(corners[q]);
 
                 ringNext[p] = q;
                 ringPrev[q] = p;
@@ -220,9 +221,9 @@ public class SpatialMesh : HalfEdgeMesh
         int t0 = cursor;
         int t1 = ringNext[t0];
         int t2 = ringNext[t1];
-        output.Add(denseIdx[t0]);
-        output.Add(denseIdx[t1]);
-        output.Add(denseIdx[t2]);
+        output.Add(corners[t0]);
+        output.Add(corners[t1]);
+        output.Add(corners[t2]);
         return true;
     }
 
