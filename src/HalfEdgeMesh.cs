@@ -242,6 +242,24 @@ public partial class HalfEdgeMesh : IDisposable
     }
 
     /// <summary>
+    /// Removes only <paramref name="face"/>, preserving its boundary edges and vertices.
+    /// The face's interior half-edges become a boundary loop and retain their handles and
+    /// component-column values so the same polygon can be restored later with <see cref="AddFace"/>.
+    /// </summary>
+    /// <returns><c>true</c> when a live face was removed; otherwise <c>false</c>.</returns>
+    public bool RemoveFace(FaceHandle face)
+    {
+        if (!Faces.IsAlive(face))
+            return false;
+
+        foreach (HalfEdgeHandle halfEdge in HalfEdgesAroundFace(face))
+            HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(halfEdge).Face = FaceHandle.Null;
+
+        Faces.Free(face);
+        return true;
+    }
+
+    /// <summary>
     /// Find the outgoing half-edge from <paramref name="from"/> whose destination
     /// is <paramref name="to"/>, or <see cref="Handle{T}.Null"/> if no such edge
     /// exists. Does not validate handles; the caller must ensure both vertices
