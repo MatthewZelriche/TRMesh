@@ -109,6 +109,62 @@ public sealed class FaceUvProjectorTests
     }
 
     [Fact]
+    public void ReprojectInitializedFacesAroundVertices_UpdatesFaceAfterGeometryEdit()
+    {
+        using SpatialMesh mesh = BuildFace(
+            Vector3.Zero,
+            new Vector3(4f, 0f, 0f),
+            new Vector3(4f, 2f, 0f),
+            new Vector3(0f, 2f, 0f)
+        );
+        FaceHandle face = GetOnlyFace(mesh);
+        List<FaceCornerHandle> corners = CollectFaceCorners(mesh, face);
+        List<ProjectedFaceCornerUv> initialProjection = [];
+        Assert.True(FaceUvProjector.TryProject(mesh, face, initialProjection));
+        foreach (ProjectedFaceCornerUv corner in initialProjection)
+            mesh.SetFaceCornerUv(corner.Corner, corner.Uv);
+        mesh.SetFaceUvsInitialized(face, true);
+
+        VertexHandle movedVertex = mesh.GetHalfEdge(corners[2]).Origin;
+        mesh.SetVertexPosition(movedVertex, new Vector3(3f, 2f, 0f));
+
+        Assert.Equal(
+            1,
+            FaceUvProjector.ReprojectInitializedFacesAroundVertices(mesh, [movedVertex])
+        );
+        foreach (FaceCornerHandle corner in corners)
+        {
+            Vector3 position = mesh.GetVertexPosition(mesh.GetHalfEdge(corner).Origin);
+            AssertVectorApproximately(
+                new Vector2(position.X, position.Y),
+                mesh.GetFaceCornerUv(corner)
+            );
+        }
+    }
+
+    [Fact]
+    public void ReprojectInitializedFacesAroundVertices_LeavesUninitializedFaceUnchanged()
+    {
+        using SpatialMesh mesh = BuildFace(
+            Vector3.Zero,
+            Vector3.UnitX,
+            new Vector3(1f, 1f, 0f),
+            Vector3.UnitY
+        );
+        FaceHandle face = GetOnlyFace(mesh);
+        FaceCornerHandle movedCorner = CollectFaceCorners(mesh, face)[2];
+        VertexHandle movedVertex = mesh.GetHalfEdge(movedCorner).Origin;
+        mesh.SetVertexPosition(movedVertex, new Vector3(2f, 2f, 0f));
+
+        Assert.Equal(
+            0,
+            FaceUvProjector.ReprojectInitializedFacesAroundVertices(mesh, [movedVertex])
+        );
+        foreach (FaceCornerHandle corner in mesh.HalfEdgesAroundFace(face))
+            Assert.Equal(Vector2.Zero, mesh.GetFaceCornerUv(corner));
+    }
+
+    [Fact]
     public void TryProject_DegenerateFaceLeavesOutputUnchanged()
     {
         using SpatialMesh mesh = BuildFace(Vector3.Zero, Vector3.UnitX, Vector3.UnitX * 2f);

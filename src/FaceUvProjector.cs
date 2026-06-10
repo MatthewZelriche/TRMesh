@@ -15,6 +15,50 @@ public static class FaceUvProjector
     private const float DegenerateNormalLengthSquared = 1e-12f;
 
     /// <summary>
+    /// Reprojects every UV-initialized polygon face adjacent to at least one supplied vertex.
+    /// Returns the number of faces successfully reprojected.
+    /// </summary>
+    /// <remarks>
+    /// This provides basic object-space texture lock for geometry editing. A face is projected at
+    /// most once even when several of its vertices move. Faces that become degenerate retain their
+    /// previous UVs because no valid replacement projection can be generated.
+    /// </remarks>
+    public static int ReprojectInitializedFacesAroundVertices(
+        SpatialMesh mesh,
+        IEnumerable<VertexHandle> vertices
+    )
+    {
+        ArgumentNullException.ThrowIfNull(mesh);
+        ArgumentNullException.ThrowIfNull(vertices);
+
+        HashSet<FaceHandle> affectedFaces = [];
+        foreach (VertexHandle vertex in vertices)
+        {
+            foreach (HalfEdgeHandle outgoing in mesh.HalfEdgesAroundVertex(vertex))
+            {
+                HalfEdge halfEdge = mesh.GetHalfEdge(outgoing);
+                AddInitializedFace(mesh, halfEdge.Face, affectedFaces);
+                AddInitializedFace(mesh, mesh.GetHalfEdge(halfEdge.Twin).Face, affectedFaces);
+            }
+        }
+
+        List<ProjectedFaceCornerUv> projected = [];
+        int reprojectedCount = 0;
+        foreach (FaceHandle face in affectedFaces)
+        {
+            projected.Clear();
+            if (!TryProject(mesh, face, projected))
+                continue;
+
+            foreach (ProjectedFaceCornerUv corner in projected)
+                mesh.SetFaceCornerUv(corner.Corner, corner.Uv);
+            reprojectedCount++;
+        }
+
+        return reprojectedCount;
+    }
+
+    /// <summary>
     /// Projects the original corners of <paramref name="face"/> into object-local UV space and
     /// appends them to <paramref name="output"/> in face-loop order.
     /// </summary>
@@ -115,5 +159,15 @@ public static class FaceUvProjector
         if (absolute.Y >= absolute.Z)
             return Vector3.UnitX;
         return normal.Z >= 0f ? Vector3.UnitX : -Vector3.UnitX;
+    }
+
+    private static void AddInitializedFace(
+        SpatialMesh mesh,
+        FaceHandle face,
+        HashSet<FaceHandle> affectedFaces
+    )
+    {
+        if (!face.IsNull && mesh.AreFaceUvsInitialized(face))
+            affectedFaces.Add(face);
     }
 }
