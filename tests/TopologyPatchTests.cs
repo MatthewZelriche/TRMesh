@@ -74,6 +74,7 @@ public sealed class TopologyPatchTests
             snapshot => Assert.True(mesh.HalfEdges.IsReserved(snapshot.Handle))
         );
         Assert.All(before.Faces, snapshot => Assert.True(mesh.Faces.IsReserved(snapshot.Handle)));
+        mesh.ValidateConsistency();
     }
 
     [Fact]

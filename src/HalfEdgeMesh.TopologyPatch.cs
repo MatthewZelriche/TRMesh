@@ -111,4 +111,25 @@ public partial class HalfEdgeMesh
         }
         return snapshots.ToArray();
     }
+
+#if DEBUG
+    internal TopologyPatchState CaptureFullTopologyPatchState() =>
+        new(
+            CaptureAllInStorageOrder(Vertices),
+            CaptureAllInStorageOrder(HalfEdges),
+            CaptureAllInStorageOrder(Faces)
+        );
+
+    private static EntitySnapshot<TTag>[] CaptureAllInStorageOrder<TTag, TConnectivity>(
+        TopologyStorage<TTag, TConnectivity> storage
+    )
+        where TTag : unmanaged
+        where TConnectivity : unmanaged
+    {
+        List<EntitySnapshot<TTag>> snapshots = new(storage.LiveCount);
+        foreach (Handle<TTag> handle in storage)
+            snapshots.Add(storage.Capture(handle));
+        return snapshots.ToArray();
+    }
+#endif
 }

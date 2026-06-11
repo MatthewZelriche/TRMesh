@@ -19,6 +19,9 @@ public sealed class TopologyEditScope
     private readonly HashSet<VertexHandle> _allocatedVertices = [];
     private readonly HashSet<HalfEdgeHandle> _allocatedHalfEdges = [];
     private readonly HashSet<FaceHandle> _allocatedFaces = [];
+#if DEBUG
+    private readonly TopologyPatchState _debugInitialFullState;
+#endif
     private bool _tracking = true;
     private bool _completed;
 
@@ -28,6 +31,9 @@ public sealed class TopologyEditScope
         _beforeVertices = Index(before.Vertices);
         _beforeHalfEdges = Index(before.HalfEdges);
         _beforeFaces = Index(before.Faces);
+#if DEBUG
+        _debugInitialFullState = mesh.CaptureFullTopologyPatchState();
+#endif
 
         mesh.Vertices.BeginEditTracking(this);
         mesh.HalfEdges.BeginEditTracking(this);
@@ -42,6 +48,19 @@ public sealed class TopologyEditScope
     {
         ThrowIfCompleted();
         StopTracking();
+
+#if DEBUG
+        try
+        {
+            ValidateUnaffectedEntitiesUnchanged();
+        }
+        catch
+        {
+            RollBackToDebugInitialState();
+            Complete();
+            throw;
+        }
+#endif
 
         ReleaseCreatedAndRemoved(_mesh.Vertices, _allocatedVertices, _beforeVertices);
         ReleaseCreatedAndRemoved(_mesh.HalfEdges, _allocatedHalfEdges, _beforeHalfEdges);
@@ -126,6 +145,73 @@ public sealed class TopologyEditScope
         if (_completed)
             throw new InvalidOperationException("The topology edit has already completed.");
     }
+
+#if DEBUG
+    private void ValidateUnaffectedEntitiesUnchanged()
+    {
+        ValidateUnaffectedEntitiesUnchanged(
+            _mesh.Vertices,
+            _debugInitialFullState.Vertices,
+            _beforeVertices
+        );
+        ValidateUnaffectedEntitiesUnchanged(
+            _mesh.HalfEdges,
+            _debugInitialFullState.HalfEdges,
+            _beforeHalfEdges
+        );
+        ValidateUnaffectedEntitiesUnchanged(
+            _mesh.Faces,
+            _debugInitialFullState.Faces,
+            _beforeFaces
+        );
+    }
+
+    private void RollBackToDebugInitialState()
+    {
+        ReleaseCreatedAndRemoved(_mesh.Vertices, _allocatedVertices, _beforeVertices);
+        ReleaseCreatedAndRemoved(_mesh.HalfEdges, _allocatedHalfEdges, _beforeHalfEdges);
+        ReleaseCreatedAndRemoved(_mesh.Faces, _allocatedFaces, _beforeFaces);
+
+        TopologyPatchState currentFullState = _mesh.CaptureFullTopologyPatchState();
+        using TopologyPatch rollback = new(_mesh, _debugInitialFullState, currentFullState);
+        rollback.ApplyBefore();
+    }
+
+    private static void ValidateUnaffectedEntitiesUnchanged<TTag, TConnectivity>(
+        TopologyStorage<TTag, TConnectivity> storage,
+        IReadOnlyList<EntitySnapshot<TTag>> initialSnapshots,
+        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> patchBefore
+    )
+        where TTag : unmanaged
+        where TConnectivity : unmanaged
+    {
+        for (int i = 0; i < initialSnapshots.Count; i++)
+        {
+            EntitySnapshot<TTag> initial = initialSnapshots[i];
+            if (patchBefore.ContainsKey(initial.Handle))
+                continue;
+
+            if (!storage.IsAlive(initial.Handle))
+                ThrowUnderCaptured(initial.Handle);
+
+            EntitySnapshot<TTag> current = storage.Capture(initial.Handle);
+            if (!SnapshotsEqual(initial, current))
+                ThrowUnderCaptured(initial.Handle);
+        }
+    }
+
+    private static bool SnapshotsEqual<TTag>(EntitySnapshot<TTag> left, EntitySnapshot<TTag> right)
+        where TTag : unmanaged =>
+        left.Handle == right.Handle
+        && left.ComponentData.Span.SequenceEqual(right.ComponentData.Span);
+
+    private static void ThrowUnderCaptured<TTag>(Handle<TTag> handle)
+        where TTag : unmanaged =>
+        throw new InvalidOperationException(
+            $"Topology edit modified pre-existing entity {handle} outside the captured patch domain. "
+                + "Include a more conservative affected-vertex set."
+        );
+#endif
 
     private static void AddRemovedSnapshot<TTag>(
         EntitySnapshot<TTag> snapshot,

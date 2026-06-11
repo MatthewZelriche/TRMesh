@@ -1,5 +1,7 @@
 namespace TREditorSharp.Tests;
 
+using System.Numerics;
+
 public sealed class TopologyEditScopeTests
 {
     [Fact]
@@ -17,11 +19,13 @@ public sealed class TopologyEditScopeTests
             face = mesh.AddFace([a, b, c]);
             createdHalfEdges = CollectHalfEdges(mesh);
             using TopologyPatch patch = edit.Commit();
+            mesh.ValidateConsistency();
 
             patch.ApplyBefore();
             Assert.False(mesh.Faces.IsAlive(face));
             Assert.All(createdHalfEdges, handle => Assert.False(mesh.HalfEdges.IsAlive(handle)));
             Assert.All([a, b, c], handle => Assert.True(mesh.Vertices.IsAlive(handle)));
+            mesh.ValidateConsistency();
 
             patch.ApplyAfter();
             Assert.True(mesh.Faces.IsAlive(face));
@@ -29,6 +33,48 @@ public sealed class TopologyEditScopeTests
             mesh.ValidateConsistency();
         }
     }
+
+#if DEBUG
+    [Fact]
+    public void Commit_UnderCapturedComponentWriteRollsBackAndThrows()
+    {
+        using SpatialMesh mesh = new();
+        VertexHandle affected = mesh.AddVertex(new(1, 2, 3));
+        VertexHandle unrelated = mesh.AddVertex(new(4, 5, 6));
+        Vector3 original = mesh.GetVertexPosition(unrelated);
+
+        using TopologyEditScope edit = mesh.BeginTopologyEdit([affected]);
+        mesh.SetVertexPosition(unrelated, new(7, 8, 9));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(edit.Commit);
+
+        Assert.Contains("outside the captured patch domain", error.Message);
+        Assert.Equal(original, mesh.GetVertexPosition(unrelated));
+        Assert.True(mesh.Vertices.IsAlive(affected));
+        using TopologyEditScope next = mesh.BeginTopologyEdit([affected]);
+        using TopologyPatch patch = next.Commit();
+    }
+
+    [Fact]
+    public void Commit_UnderCapturedConnectivityWriteRollsBackAndThrows()
+    {
+        using HalfEdgeMesh mesh = BuildTwoDisconnectedTriangles(
+            out VertexHandle affected,
+            out FaceHandle unrelatedFace
+        );
+        Face original = mesh.Faces[unrelatedFace];
+        HalfEdgeHandle incorrectAnchor = CollectHalfEdges(mesh)
+            .First(halfEdge => mesh.GetHalfEdge(halfEdge).Face != unrelatedFace);
+
+        using TopologyEditScope edit = mesh.BeginTopologyEdit([affected]);
+        mesh.Faces[unrelatedFace] = new Face { FirstHalfEdge = incorrectAnchor };
+
+        Assert.Throws<InvalidOperationException>(edit.Commit);
+
+        Assert.Equal(original.FirstHalfEdge, mesh.Faces[unrelatedFace].FirstHalfEdge);
+        mesh.ValidateConsistency();
+    }
+#endif
 
     [Fact]
     public void Commit_RemoveTracksUnexpectedEntityOutsideInitialOneRing()
@@ -65,6 +111,7 @@ public sealed class TopologyEditScopeTests
         using TopologyPatch patch = edit.Commit();
 
         Assert.True(mesh.Faces.IsReserved(face));
+        mesh.ValidateConsistency();
 
         patch.ApplyBefore();
         Assert.True(mesh.Faces.IsAlive(face));
@@ -145,12 +192,14 @@ public sealed class TopologyEditScopeTests
         VertexHandle vertex = mesh.Vertices.Allocate();
 
         Assert.Throws<InvalidOperationException>(
-            (Action)(() =>
-            {
-                using TopologyEditScope edit = mesh.BeginTopologyEdit([vertex]);
-                mesh.Vertices.Free(vertex);
-                throw new InvalidOperationException("Simulated edit failure.");
-            })
+            (Action)(
+                () =>
+                {
+                    using TopologyEditScope edit = mesh.BeginTopologyEdit([vertex]);
+                    mesh.Vertices.Free(vertex);
+                    throw new InvalidOperationException("Simulated edit failure.");
+                }
+            )
         );
 
         Assert.True(mesh.Vertices.IsAlive(vertex));
@@ -195,6 +244,24 @@ public sealed class TopologyEditScopeTests
         b = mesh.Vertices.Allocate();
         c = mesh.Vertices.Allocate();
         face = mesh.AddFace([a, b, c]);
+        return mesh;
+    }
+
+    private static HalfEdgeMesh BuildTwoDisconnectedTriangles(
+        out VertexHandle affected,
+        out FaceHandle unrelatedFace
+    )
+    {
+        HalfEdgeMesh mesh = new();
+        affected = mesh.Vertices.Allocate();
+        VertexHandle b = mesh.Vertices.Allocate();
+        VertexHandle c = mesh.Vertices.Allocate();
+        mesh.AddFace([affected, b, c]);
+
+        VertexHandle x = mesh.Vertices.Allocate();
+        VertexHandle y = mesh.Vertices.Allocate();
+        VertexHandle z = mesh.Vertices.Allocate();
+        unrelatedFace = mesh.AddFace([x, y, z]);
         return mesh;
     }
 }
