@@ -135,6 +135,24 @@ internal sealed class SlotPool<TTag>
         for (int i = 0; i < _columns.Count; i++)
             _columns[i].Add();
 
+        RestoreEntries(snapshot);
+    }
+
+    public void RestoreEntries(EntitySnapshot<TTag> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!_set.Contains(snapshot.Handle))
+            ThrowInvalid(snapshot.Handle);
+
+        int expectedBytes = 0;
+        for (int i = 0; i < _columns.Count; i++)
+            expectedBytes = checked(expectedBytes + _columns[i].ElementSize);
+        if (snapshot.ComponentData.Length != expectedBytes)
+            throw new ArgumentException(
+                "Entity snapshot component data does not match the registered columns.",
+                nameof(snapshot)
+            );
+
         int denseIndex = _set.GetDenseIndex(snapshot.Handle);
         ReadOnlySpan<byte> data = snapshot.ComponentData.Span;
         int offset = 0;

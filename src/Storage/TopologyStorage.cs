@@ -70,6 +70,19 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         _pool.RestoreReserved(snapshot);
     }
 
+    internal void RestoreEntries(EntitySnapshot<TTag> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ValidateSchema(snapshot.ColumnSchema);
+        _pool.RestoreEntries(snapshot);
+    }
+
+    internal void ValidateSnapshotSchema(EntitySnapshot<TTag> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ValidateSchema(snapshot.ColumnSchema);
+    }
+
     internal void ReleaseReserved(Handle<TTag> handle) => _pool.ReleaseReserved(handle);
 
     internal bool IsReserved(Handle<TTag> handle) => _pool.IsReserved(handle);
