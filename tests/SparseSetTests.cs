@@ -1,5 +1,7 @@
 namespace TREditorSharp.Tests;
 
+using System.Collections;
+using System.Reflection;
 using TREditorSharp.Storage;
 
 public class SparseSetTests
@@ -10,6 +12,12 @@ public class SparseSetTests
         var set = new SparseSet<VertexTag>();
         Assert.Equal(0, set.Count);
         Assert.True(set.IsEmpty);
+    }
+
+    [Fact]
+    public void SparseEntryRemainsTwoIntegersWide()
+    {
+        Assert.Equal(sizeof(int) * 2, SparseSet<VertexTag>.SparseEntrySize);
     }
 
     [Fact]
@@ -99,6 +107,114 @@ public class SparseSetTests
         var h = set.Insert();
         set.Erase(h);
         Assert.False(set.Erase(h));
+    }
+
+    [Fact]
+    public void ReserveMakesHandleNonLiveWithoutChangingGeneration()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle handle = set.Insert();
+
+        Assert.True(set.Reserve(handle));
+
+        Assert.False(set.Contains(handle));
+        Assert.True(set.IsReserved(handle));
+        Assert.Equal(0, set.Count);
+        Assert.False(set.TryGetDenseIndex(handle, out _));
+    }
+
+    [Fact]
+    public void ReservedSlotIsNotReusedByInsert()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle reserved = set.Insert();
+        Assert.True(set.Reserve(reserved));
+
+        VertexHandle inserted = set.Insert();
+
+        Assert.NotEqual(reserved.Index, inserted.Index);
+        Assert.True(set.IsReserved(reserved));
+        Assert.True(set.Contains(inserted));
+    }
+
+    [Fact]
+    public void RestoreReservedResurrectsExactHandleAtNewDenseIndex()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle first = set.Insert();
+        VertexHandle reserved = set.Insert();
+        VertexHandle last = set.Insert();
+        Assert.True(set.Reserve(reserved));
+        Assert.Equal(1, set.GetDenseIndex(last));
+
+        Assert.True(set.RestoreReserved(reserved));
+
+        Assert.True(set.Contains(reserved));
+        Assert.False(set.IsReserved(reserved));
+        Assert.Equal(2, set.GetDenseIndex(reserved));
+        Assert.Equal(first, set.HandleAtDense(0));
+        Assert.Equal(last, set.HandleAtDense(1));
+        Assert.Equal(reserved, set.HandleAtDense(2));
+    }
+
+    [Fact]
+    public void ReleaseReservedInvalidatesHandleAndMakesSlotReusable()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle reserved = set.Insert();
+        Assert.True(set.Reserve(reserved));
+
+        Assert.True(set.ReleaseReserved(reserved));
+        VertexHandle replacement = set.Insert();
+
+        Assert.Equal(reserved.Index, replacement.Index);
+        Assert.NotEqual(reserved.Generation, replacement.Generation);
+        Assert.False(set.Contains(reserved));
+        Assert.False(set.IsReserved(reserved));
+        Assert.True(set.Contains(replacement));
+    }
+
+    [Fact]
+    public void ReleasedSlotCannotAppearLiveBeforeReuse()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle reserved = set.Insert();
+        Assert.True(set.Reserve(reserved));
+        Assert.True(set.ReleaseReserved(reserved));
+        VertexHandle forgedCurrentGeneration = new(reserved.Index, reserved.Generation + 1);
+
+        Assert.False(set.Contains(forgedCurrentGeneration));
+    }
+
+    [Fact]
+    public void ReservedLifecycleRejectsInvalidStateTransitions()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle live = set.Insert();
+
+        Assert.False(set.RestoreReserved(live));
+        Assert.False(set.ReleaseReserved(live));
+        Assert.True(set.Reserve(live));
+        Assert.False(set.Reserve(live));
+        Assert.True(set.RestoreReserved(live));
+        Assert.False(set.RestoreReserved(live));
+        Assert.False(set.ReleaseReserved(live));
+    }
+
+    [Fact]
+    public void ReleaseReservedAtGenerationLimitRetiresSlot()
+    {
+        var set = new SparseSet<VertexTag>();
+        VertexHandle original = set.Insert();
+        VertexHandle finalGeneration = SetGeneration(set, original, int.MaxValue - 1);
+        Assert.True(set.Reserve(finalGeneration));
+
+        Assert.True(set.ReleaseReserved(finalGeneration));
+        VertexHandle inserted = set.Insert();
+
+        Assert.NotEqual(finalGeneration.Index, inserted.Index);
+        Assert.False(set.Contains(finalGeneration));
+        Assert.False(set.IsReserved(finalGeneration));
     }
 
     [Fact]
@@ -308,5 +424,32 @@ public class SparseSetTests
         Assert.Equal(live.Count, visited.Count);
         for (int i = 0; i < visited.Count; i++)
             Assert.Equal(i, set.GetDenseIndex(visited[i]));
+    }
+
+    private static VertexHandle SetGeneration(
+        SparseSet<VertexTag> set,
+        VertexHandle handle,
+        int generation
+    )
+    {
+        FieldInfo sparseField =
+            typeof(SparseSet<VertexTag>).GetField(
+                "_sparse",
+                BindingFlags.Instance | BindingFlags.NonPublic
+            ) ?? throw new InvalidOperationException("SparseSet._sparse was not found.");
+        IList sparse = (IList)(
+            sparseField.GetValue(set)
+            ?? throw new InvalidOperationException("SparseSet._sparse was null.")
+        );
+        object entry =
+            sparse[handle.Index]
+            ?? throw new InvalidOperationException("SparseSet entry was null.");
+        FieldInfo versionField =
+            entry.GetType().GetField("Version") ?? throw new InvalidOperationException(
+                "SparseEntry.Version was not found."
+            );
+        versionField.SetValue(entry, generation);
+        sparse[handle.Index] = entry;
+        return new VertexHandle(handle.Index, generation);
     }
 }

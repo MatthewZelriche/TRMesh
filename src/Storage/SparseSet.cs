@@ -18,11 +18,9 @@ public sealed class SparseSet<TTag>
 {
     private struct SparseEntry
     {
-        // While the slot is live, this is the slot's index in _dense.
-        // While the slot is on the freelist, this is the next free sparse index
-        // (or FreeListEnd for the tail). The two readings can never
-        // collide because liveness is implied by version equality plus the
-        // up-front IsNull check in Contains.
+        // Live dense indices are non-negative. Every non-live state is encoded as a
+        // negative sentinel: free entries encode their next freelist index, reserved
+        // entries use ReservedDenseIndex, and retired entries use RetiredDenseIndex.
         public int DenseIdx;
         public int Version;
     }
@@ -33,7 +31,11 @@ public sealed class SparseSet<TTag>
 
     // C# uses int for counts in List<T>, so we are forced to use int as well.
     private const int FreeListEnd = -1;
-    private const int MaxSparseSize = int.MaxValue - 1;
+    private const int ReservedDenseIndex = -2;
+    private const int RetiredDenseIndex = -3;
+    private const int EncodedFreeListEnd = -4;
+    private const int FreeListEncodingOffset = 5;
+    private const int MaxSparseSize = int.MaxValue - FreeListEncodingOffset;
 
     // When a slot's bumped version reaches this value the slot is retired
     // permanently (never returned to the freelist).
@@ -51,6 +53,8 @@ public sealed class SparseSet<TTag>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _dense.Count == 0;
     }
+
+    internal static int SparseEntrySize => Unsafe.SizeOf<SparseEntry>();
 
     /// <summary>
     /// Insert a new entry and return a fresh handle. O(1).
@@ -112,6 +116,18 @@ public sealed class SparseSet<TTag>
     /// </summary>
     public bool Erase(Handle<TTag> handle)
     {
+        if (!Reserve(handle))
+            return false;
+
+        return ReleaseReserved(handle);
+    }
+
+    /// <summary>
+    /// Remove a live handle from dense storage without changing its generation or making its
+    /// sparse slot available for reuse.
+    /// </summary>
+    internal bool Reserve(Handle<TTag> handle)
+    {
         if (!Contains(handle))
             return false;
 
@@ -127,8 +143,45 @@ public sealed class SparseSet<TTag>
         }
         _dense.RemoveAt(last);
 
+        var entry = _sparse[handle.Index];
+        entry.DenseIdx = ReservedDenseIndex;
+        _sparse[handle.Index] = entry;
+        return true;
+    }
+
+    /// <summary>
+    /// Restore a reserved handle to live dense storage with its original generation.
+    /// </summary>
+    internal bool RestoreReserved(Handle<TTag> handle)
+    {
+        if (!IsReserved(handle))
+            return false;
+
+        var entry = _sparse[handle.Index];
+        entry.DenseIdx = _dense.Count;
+        _sparse[handle.Index] = entry;
+        _dense.Add(handle.Index);
+        return true;
+    }
+
+    /// <summary>
+    /// Permanently release a reserved handle, invalidating its generation and making its sparse
+    /// slot reusable unless generation exhaustion retires it.
+    /// </summary>
+    internal bool ReleaseReserved(Handle<TTag> handle)
+    {
+        if (!IsReserved(handle))
+            return false;
+
         FreeSparseEntry(handle.Index);
         return true;
+    }
+
+    internal bool IsReserved(Handle<TTag> handle)
+    {
+        if (!MatchesGeneration(handle))
+            return false;
+        return _sparse[handle.Index].DenseIdx == ReservedDenseIndex;
     }
 
     /// <summary>
@@ -142,7 +195,8 @@ public sealed class SparseSet<TTag>
             return false;
         if ((uint)handle.Index >= (uint)_sparse.Count)
             return false;
-        return _sparse[handle.Index].Version == handle.Generation;
+        SparseEntry entry = _sparse[handle.Index];
+        return entry.DenseIdx >= 0 && entry.Version == handle.Generation;
     }
 
     /// <summary>
@@ -211,13 +265,17 @@ public sealed class SparseSet<TTag>
         var entry = _sparse[sparseIdx];
         entry.Version++;
 
-        if (entry.Version != DisabledVersion)
+        if (entry.Version == DisabledVersion)
         {
-            // Push the (now dead) slot onto the freelist by reusing DenseIdx as next-pointer.
-            entry.DenseIdx = _freeHead;
+            entry.DenseIdx = RetiredDenseIndex;
+        }
+        else
+        {
+            // Keep free entries distinguishable from live dense indices by encoding the next
+            // freelist index as a negative value.
+            entry.DenseIdx = EncodeFreeListNext(_freeHead);
             _freeHead = sparseIdx;
         }
-        // else: slot retired permanently and is dropped from the freelist.
 
         _sparse[sparseIdx] = entry;
     }
@@ -227,8 +285,22 @@ public sealed class SparseSet<TTag>
         int oldHead = _freeHead;
         if (oldHead == FreeListEnd)
             return FreeListEnd;
-        _freeHead = _sparse[oldHead].DenseIdx;
+        SparseEntry entry = _sparse[oldHead];
+        _freeHead = DecodeFreeListNext(entry.DenseIdx);
         return oldHead;
+    }
+
+    private static int EncodeFreeListNext(int next) =>
+        next == FreeListEnd ? EncodedFreeListEnd : -(next + FreeListEncodingOffset);
+
+    private static int DecodeFreeListNext(int encoded) =>
+        encoded == EncodedFreeListEnd ? FreeListEnd : -encoded - FreeListEncodingOffset;
+
+    private bool MatchesGeneration(Handle<TTag> handle)
+    {
+        if (handle.IsNull || (uint)handle.Index >= (uint)_sparse.Count)
+            return false;
+        return _sparse[handle.Index].Version == handle.Generation;
     }
 
     /// <summary>
