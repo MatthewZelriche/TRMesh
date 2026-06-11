@@ -60,6 +60,9 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     internal EntitySnapshot<TTag> CaptureAndReserve(Handle<TTag> handle) =>
         _pool.CaptureAndReserve(handle, _columnSchema);
 
+    internal EntitySnapshot<TTag> Capture(Handle<TTag> handle) =>
+        _pool.Capture(handle, _columnSchema);
+
     internal void RestoreReserved(EntitySnapshot<TTag> snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);

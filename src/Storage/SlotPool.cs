@@ -73,6 +73,19 @@ internal sealed class SlotPool<TTag>
         ComponentColumnSchema[] columnSchema
     )
     {
+        EntitySnapshot<TTag> snapshot = Capture(handle, columnSchema);
+        int denseIndex = _set.GetDenseIndex(handle);
+
+        for (int i = 0; i < _columns.Count; i++)
+            _columns[i].SwapRemoveAt(denseIndex);
+        if (!_set.Reserve(handle))
+            throw new InvalidOperationException("Failed to reserve a previously validated handle.");
+
+        return snapshot;
+    }
+
+    public EntitySnapshot<TTag> Capture(Handle<TTag> handle, ComponentColumnSchema[] columnSchema)
+    {
         ArgumentNullException.ThrowIfNull(columnSchema);
         if (!_set.Contains(handle))
             ThrowInvalid(handle);
@@ -95,11 +108,6 @@ internal sealed class SlotPool<TTag>
             column.CopyEntryTo(denseIndex, componentData.AsSpan(offset, column.ElementSize));
             offset += column.ElementSize;
         }
-
-        for (int i = 0; i < _columns.Count; i++)
-            _columns[i].SwapRemoveAt(denseIndex);
-        if (!_set.Reserve(handle))
-            throw new InvalidOperationException("Failed to reserve a previously validated handle.");
 
         return new EntitySnapshot<TTag>(handle, columnSchema, componentData);
     }
