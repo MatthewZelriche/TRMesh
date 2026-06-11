@@ -23,6 +23,9 @@ public interface IComponentColumn
     /// <summary>The element type this column stores.</summary>
     Type ElementType { get; }
 
+    /// <summary>Size in bytes of one component entry.</summary>
+    int ElementSize { get; }
+
     /// <summary>Number of currently live entries (always equal to the pool's live count).</summary>
     int Count { get; }
 
@@ -49,6 +52,20 @@ public interface IComponentColumn
     /// entry that was at <c>Count - 1</c> now lives at <paramref name="index"/>.
     /// </summary>
     void SwapRemoveAt(int index);
+
+    /// <summary>
+    /// Copy the component entry at <paramref name="denseIndex"/> into
+    /// <paramref name="destination"/>. The destination length must exactly equal
+    /// <see cref="ElementSize"/>.
+    /// </summary>
+    void CopyEntryTo(int denseIndex, Span<byte> destination);
+
+    /// <summary>
+    /// Restore the component entry at <paramref name="denseIndex"/> from
+    /// <paramref name="source"/>. The source length must exactly equal
+    /// <see cref="ElementSize"/>.
+    /// </summary>
+    void RestoreEntryFrom(int denseIndex, ReadOnlySpan<byte> source);
 
     /// <summary>
     /// Reset <see cref="Count"/> to zero. The backing buffer is retained.

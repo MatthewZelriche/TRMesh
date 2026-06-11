@@ -29,6 +29,8 @@ public sealed unsafe class NativeColumn<T> : IComponentColumn, IDisposable
 
     public Type ElementType => typeof(T);
 
+    public int ElementSize => sizeof(T);
+
     public int Count => _count;
 
     public int Capacity => _capacity;
@@ -129,6 +131,24 @@ public sealed unsafe class NativeColumn<T> : IComponentColumn, IDisposable
         _count--;
     }
 
+    public void CopyEntryTo(int denseIndex, Span<byte> destination)
+    {
+        ValidateEntryBuffer(destination.Length, nameof(destination));
+        if ((uint)denseIndex >= (uint)_count)
+            ThrowOutOfRange(denseIndex);
+
+        new ReadOnlySpan<byte>(_data + denseIndex, sizeof(T)).CopyTo(destination);
+    }
+
+    public void RestoreEntryFrom(int denseIndex, ReadOnlySpan<byte> source)
+    {
+        ValidateEntryBuffer(source.Length, nameof(source));
+        if ((uint)denseIndex >= (uint)_count)
+            ThrowOutOfRange(denseIndex);
+
+        source.CopyTo(new Span<byte>(_data + denseIndex, sizeof(T)));
+    }
+
     public void Clear()
     {
         if (_count == 0)
@@ -193,4 +213,15 @@ public sealed unsafe class NativeColumn<T> : IComponentColumn, IDisposable
 
     private static void ThrowOutOfRange(int index) =>
         throw new ArgumentOutOfRangeException(nameof(index), index, "Index out of range.");
+
+    private static void ValidateEntryBuffer(int length, string parameterName)
+    {
+        if (length != sizeof(T))
+        {
+            throw new ArgumentException(
+                $"Component entry buffer must be exactly {sizeof(T)} bytes, but was {length}.",
+                parameterName
+            );
+        }
+    }
 }

@@ -29,6 +29,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     private readonly SlotPool<TTag> _pool;
     private readonly NativeColumn<TConnectivity> _connectivity;
     private readonly Dictionary<Type, IComponentColumn> _columnsByTag = [];
+    private readonly List<ComponentColumnSchema> _columnSchema = [];
     private bool _disposed;
 
     public TopologyStorage()
@@ -37,6 +38,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         _connectivity = new NativeColumn<TConnectivity>();
         // Connectivity column is implicitly tagged by its own element type.
         _columnsByTag[typeof(TConnectivity)] = _connectivity;
+        AddColumnSchema(typeof(TConnectivity), _connectivity);
         _pool.RegisterColumn(_connectivity);
     }
 
@@ -185,6 +187,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
             );
         var col = new NativeColumn<T>();
         _columnsByTag[typeof(TColumnTag)] = col;
+        AddColumnSchema(typeof(TColumnTag), col);
         _pool.RegisterColumn(col);
         return col;
     }
@@ -227,6 +230,8 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
 
     internal Span<TConnectivity> ConnectivitySpan => _connectivity.AsSpan();
 
+    internal IReadOnlyList<ComponentColumnSchema> ColumnSchema => _columnSchema;
+
     /// <summary>Iterate live entity handles in unspecified order. Stack-allocated; never allocates.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public LiveHandleEnumerator GetEnumerator() => new(_pool);
@@ -248,7 +253,20 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
                 d.Dispose();
         }
         _columnsByTag.Clear();
+        _columnSchema.Clear();
         GC.SuppressFinalize(this);
+    }
+
+    private void AddColumnSchema(Type tagType, IComponentColumn column)
+    {
+        _columnSchema.Add(
+            new ComponentColumnSchema(
+                _columnSchema.Count,
+                tagType,
+                column.ElementType,
+                column.ElementSize
+            )
+        );
     }
 
     /// <summary>foreach-friendly wrapper for live-handle iteration.</summary>
