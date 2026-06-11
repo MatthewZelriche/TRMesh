@@ -6,7 +6,7 @@ using TREditorSharp.Storage;
 /// Owns the reservations and complete component state needed to repeatedly move one local
 /// topology domain between its state before and after an edit.
 /// </summary>
-internal sealed class TopologyPatch : IDisposable
+public sealed class TopologyPatch : IDisposable
 {
     private readonly HalfEdgeMesh _mesh;
     private readonly TopologyPatchState _before;
@@ -19,7 +19,7 @@ internal sealed class TopologyPatch : IDisposable
     /// <paramref name="after"/>, and entities present only in <paramref name="before"/> must
     /// remain reserved for the patch.
     /// </summary>
-    public TopologyPatch(HalfEdgeMesh mesh, TopologyPatchState before, TopologyPatchState after)
+    internal TopologyPatch(HalfEdgeMesh mesh, TopologyPatchState before, TopologyPatchState after)
     {
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(before);

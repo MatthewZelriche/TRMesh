@@ -30,6 +30,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     private readonly NativeColumn<TConnectivity> _connectivity;
     private readonly Dictionary<Type, IComponentColumn> _columnsByTag = [];
     private ComponentColumnSchema[] _columnSchema = [];
+    private ITopologyStorageEditTracker<TTag>? _editTracker;
     private bool _disposed;
 
     public TopologyStorage()
@@ -51,11 +52,45 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
 
     /// <summary>Allocate a fresh entity. O(1).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Handle<TTag> Allocate() => _pool.Allocate();
+    public Handle<TTag> Allocate()
+    {
+        Handle<TTag> handle = _pool.Allocate();
+        _editTracker?.OnAllocated(handle);
+        return handle;
+    }
 
     /// <summary>Free a previously allocated entity. O(1).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Free(Handle<TTag> handle) => _pool.Free(handle);
+    public void Free(Handle<TTag> handle)
+    {
+        if (_editTracker is null)
+        {
+            _pool.Free(handle);
+            return;
+        }
+
+        EntitySnapshot<TTag> snapshot = _pool.CaptureAndReserve(handle, _columnSchema);
+        _editTracker.OnReserved(snapshot);
+    }
+
+    internal void BeginEditTracking(ITopologyStorageEditTracker<TTag> tracker)
+    {
+        ArgumentNullException.ThrowIfNull(tracker);
+        if (_editTracker is not null)
+            throw new InvalidOperationException(
+                "Topology storage is already participating in an edit."
+            );
+        _editTracker = tracker;
+    }
+
+    internal void EndEditTracking(ITopologyStorageEditTracker<TTag> tracker)
+    {
+        if (!ReferenceEquals(_editTracker, tracker))
+            throw new InvalidOperationException(
+                "Topology storage is not participating in this edit."
+            );
+        _editTracker = null;
+    }
 
     internal EntitySnapshot<TTag> CaptureAndReserve(Handle<TTag> handle) =>
         _pool.CaptureAndReserve(handle, _columnSchema);

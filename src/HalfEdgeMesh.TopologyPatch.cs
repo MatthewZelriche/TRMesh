@@ -4,6 +4,31 @@ using TREditorSharp.Storage;
 
 public partial class HalfEdgeMesh
 {
+    private TopologyEditScope? _activeTopologyEdit;
+
+    /// <summary>
+    /// Begin tracking a topology edit around a conservative set of affected vertices.
+    /// Dispose the returned scope without committing to restore the initial state.
+    /// </summary>
+    public TopologyEditScope BeginTopologyEdit(IEnumerable<VertexHandle> affectedVertices)
+    {
+        if (_activeTopologyEdit is not null)
+            throw new InvalidOperationException(
+                "Nested topology edits on the same mesh are not supported."
+            );
+
+        TopologyEditScope edit = new(this, CaptureTopologyPatchState(affectedVertices));
+        _activeTopologyEdit = edit;
+        return edit;
+    }
+
+    internal void CompleteTopologyEdit(TopologyEditScope edit)
+    {
+        if (!ReferenceEquals(_activeTopologyEdit, edit))
+            throw new InvalidOperationException("The topology edit is not active on this mesh.");
+        _activeTopologyEdit = null;
+    }
+
     /// <summary>
     /// Capture the complete currently live state of a conservative one-ring around
     /// <paramref name="affectedVertices"/> without mutating the mesh.
