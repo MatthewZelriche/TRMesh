@@ -29,7 +29,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     private readonly SlotPool<TTag> _pool;
     private readonly NativeColumn<TConnectivity> _connectivity;
     private readonly Dictionary<Type, IComponentColumn> _columnsByTag = [];
-    private readonly List<ComponentColumnSchema> _columnSchema = [];
+    private ComponentColumnSchema[] _columnSchema = [];
     private bool _disposed;
 
     public TopologyStorage()
@@ -56,6 +56,20 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     /// <summary>Free a previously allocated entity. O(1).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Free(Handle<TTag> handle) => _pool.Free(handle);
+
+    internal EntitySnapshot<TTag> CaptureAndReserve(Handle<TTag> handle) =>
+        _pool.CaptureAndReserve(handle, _columnSchema);
+
+    internal void RestoreReserved(EntitySnapshot<TTag> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ValidateSchema(snapshot.ColumnSchema);
+        _pool.RestoreReserved(snapshot);
+    }
+
+    internal void ReleaseReserved(Handle<TTag> handle) => _pool.ReleaseReserved(handle);
+
+    internal bool IsReserved(Handle<TTag> handle) => _pool.IsReserved(handle);
 
     /// <summary>True if the handle still refers to a live entity.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -253,21 +267,39 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
                 d.Dispose();
         }
         _columnsByTag.Clear();
-        _columnSchema.Clear();
+        _columnSchema = [];
         GC.SuppressFinalize(this);
     }
 
     private void AddColumnSchema(Type tagType, IComponentColumn column)
     {
-        _columnSchema.Add(
-            new ComponentColumnSchema(
-                _columnSchema.Count,
-                tagType,
-                column.ElementType,
-                column.ElementSize
-            )
+        ComponentColumnSchema[] updated = new ComponentColumnSchema[_columnSchema.Length + 1];
+        _columnSchema.CopyTo(updated, 0);
+        updated[^1] = new ComponentColumnSchema(
+            _columnSchema.Length,
+            tagType,
+            column.ElementType,
+            column.ElementSize
         );
+        _columnSchema = updated;
     }
+
+    private void ValidateSchema(IReadOnlyList<ComponentColumnSchema> schema)
+    {
+        if (schema.Count != _columnSchema.Length)
+            ThrowSchemaMismatch();
+
+        for (int i = 0; i < schema.Count; i++)
+        {
+            if (schema[i] != _columnSchema[i])
+                ThrowSchemaMismatch();
+        }
+    }
+
+    private static void ThrowSchemaMismatch() =>
+        throw new InvalidOperationException(
+            "Entity snapshot column schema does not match the topology storage schema."
+        );
 
     /// <summary>foreach-friendly wrapper for live-handle iteration.</summary>
     public readonly ref struct LiveHandleEnumerable

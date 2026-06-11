@@ -68,6 +68,88 @@ internal sealed class SlotPool<TTag>
         _set.Erase(handle);
     }
 
+    public EntitySnapshot<TTag> CaptureAndReserve(
+        Handle<TTag> handle,
+        ComponentColumnSchema[] columnSchema
+    )
+    {
+        ArgumentNullException.ThrowIfNull(columnSchema);
+        if (!_set.Contains(handle))
+            ThrowInvalid(handle);
+        if (columnSchema.Length != _columns.Count)
+            throw new ArgumentException(
+                "Column schema does not match the registered component columns.",
+                nameof(columnSchema)
+            );
+
+        int denseIndex = _set.GetDenseIndex(handle);
+        int byteCount = 0;
+        for (int i = 0; i < columnSchema.Length; i++)
+            byteCount = checked(byteCount + columnSchema[i].ElementSize);
+
+        byte[] componentData = new byte[byteCount];
+        int offset = 0;
+        for (int i = 0; i < _columns.Count; i++)
+        {
+            IComponentColumn column = _columns[i];
+            column.CopyEntryTo(denseIndex, componentData.AsSpan(offset, column.ElementSize));
+            offset += column.ElementSize;
+        }
+
+        for (int i = 0; i < _columns.Count; i++)
+            _columns[i].SwapRemoveAt(denseIndex);
+        if (!_set.Reserve(handle))
+            throw new InvalidOperationException("Failed to reserve a previously validated handle.");
+
+        return new EntitySnapshot<TTag>(handle, columnSchema, componentData);
+    }
+
+    public void RestoreReserved(EntitySnapshot<TTag> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!_set.IsReserved(snapshot.Handle))
+            throw new InvalidOperationException(
+                $"Handle {snapshot.Handle} does not refer to a reserved slot."
+            );
+
+        int expectedBytes = 0;
+        for (int i = 0; i < _columns.Count; i++)
+            expectedBytes = checked(expectedBytes + _columns[i].ElementSize);
+        if (snapshot.ComponentData.Length != expectedBytes)
+            throw new ArgumentException(
+                "Entity snapshot component data does not match the registered columns.",
+                nameof(snapshot)
+            );
+
+        if (!_set.RestoreReserved(snapshot.Handle))
+            throw new InvalidOperationException("Failed to restore a previously validated handle.");
+
+        for (int i = 0; i < _columns.Count; i++)
+            _columns[i].Add();
+
+        int denseIndex = _set.GetDenseIndex(snapshot.Handle);
+        ReadOnlySpan<byte> data = snapshot.ComponentData.Span;
+        int offset = 0;
+        for (int i = 0; i < _columns.Count; i++)
+        {
+            IComponentColumn column = _columns[i];
+            column.RestoreEntryFrom(denseIndex, data.Slice(offset, column.ElementSize));
+            offset += column.ElementSize;
+        }
+    }
+
+    public void ReleaseReserved(Handle<TTag> handle)
+    {
+        if (!_set.ReleaseReserved(handle))
+        {
+            throw new InvalidOperationException(
+                $"Handle {handle} does not refer to a reserved slot."
+            );
+        }
+    }
+
+    internal bool IsReserved(Handle<TTag> handle) => _set.IsReserved(handle);
+
     /// <summary>
     /// Returns true iff <paramref name="handle"/> currently refers to a live slot. O(1).
     /// </summary>
