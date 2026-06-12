@@ -7,7 +7,7 @@ using TREditorSharp.Storage;
 /// <summary>
 /// HalfEdgeMesh that represents a 3D mesh that can be converted and displayed as a polygon mesh.
 /// </summary>
-public class SpatialMesh : HalfEdgeMesh
+public partial class SpatialMesh : HalfEdgeMesh
 {
     public const int UntexturedMaterialSlot = 0;
 
@@ -183,15 +183,7 @@ public class SpatialMesh : HalfEdgeMesh
         // Phase C: Newell's method for a robust face normal. Direction-only; we never
         // normalize because every consumer (convex test, point-in-triangle test) uses
         // dot/cross sign comparisons that are scale-invariant.
-        Vector3 normal = default;
-        for (int i = 0; i < count; i++)
-        {
-            var a = positions[i];
-            var b = positions[(i + 1) % count];
-            normal.X += (a.Y - b.Y) * (a.Z + b.Z);
-            normal.Y += (a.Z - b.Z) * (a.X + b.X);
-            normal.Z += (a.X - b.X) * (a.Y + b.Y);
-        }
+        Vector3 normal = ComputeNewellNormal(positions);
 
         // Phase D: ear-clipping main loop with a doubly-linked ring over indices
         // [0, count). cursor tracks where to resume the next ear search after a clip; well-behaved
