@@ -47,6 +47,15 @@ public partial class HalfEdgeMesh : IDisposable
     /// <summary>Connectivity read for <paramref name="handle"/>; throws if not live.</summary>
     public HalfEdge GetHalfEdge(HalfEdgeHandle handle) => _halfEdges[handle];
 
+    /// <summary>True when <paramref name="vertex"/> still refers to a live vertex.</summary>
+    public bool IsVertexAlive(VertexHandle vertex) => _vertices.IsAlive(vertex);
+
+    /// <summary>True when <paramref name="halfEdge"/> still refers to a live half-edge.</summary>
+    public bool IsHalfEdgeAlive(HalfEdgeHandle halfEdge) => _halfEdges.IsAlive(halfEdge);
+
+    /// <summary>True when <paramref name="face"/> still refers to a live face.</summary>
+    public bool IsFaceAlive(FaceHandle face) => _faces.IsAlive(face);
+
     private bool _disposed;
 
     public HalfEdgeMesh()
