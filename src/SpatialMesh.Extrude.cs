@@ -18,7 +18,9 @@ public partial class SpatialMesh
 
     /// <summary>
     /// Replace a face with a ring of side quads and a cap whose vertices are positioned by
-    /// <paramref name="placeVertex"/>. Shared by face extrusion and inset operations.
+    /// <paramref name="placeVertex"/>. The cap keeps the source material; each side inherits the
+    /// material across its corresponding original edge, or is untextured at a boundary. Shared by
+    /// face extrusion and inset operations.
     /// </summary>
     internal RingResult BuildExtrusionRing(FaceHandle face, Func<int, Vector3, Vector3> placeVertex)
     {
@@ -34,7 +36,8 @@ public partial class SpatialMesh
                 nameof(face)
             );
 
-        int materialSlot = GetFaceMaterialSlot(face);
+        int capMaterialSlot = GetFaceMaterialSlot(face);
+        int[] sideMaterialSlots = CollectExtrusionSideMaterialSlots(face);
         Vector3[] newPositions = new Vector3[originalVertices.Length];
         for (int i = 0; i < originalVertices.Length; i++)
             newPositions[i] = placeVertex(i, GetVertexPosition(originalVertices[i]));
@@ -55,13 +58,26 @@ public partial class SpatialMesh
                 newVertices[next],
                 newVertices[i],
             ]);
-            InitializeExtrusionFace(sideFace, materialSlot);
+            InitializeExtrusionFace(sideFace, sideMaterialSlots[i]);
             sideFaces[i] = sideFace;
         }
 
         FaceHandle capFace = AddFace(newVertices);
-        InitializeExtrusionFace(capFace, materialSlot);
+        InitializeExtrusionFace(capFace, capMaterialSlot);
         return new RingResult(capFace, sideFaces, newVertices);
+    }
+
+    private int[] CollectExtrusionSideMaterialSlots(FaceHandle face)
+    {
+        List<int> materialSlots = [];
+        foreach (HalfEdgeHandle edge in HalfEdgesAroundFace(face))
+        {
+            FaceHandle neighbor = GetHalfEdge(GetHalfEdge(edge).Twin).Face;
+            materialSlots.Add(
+                IsFaceAlive(neighbor) ? GetFaceMaterialSlot(neighbor) : UntexturedMaterialSlot
+            );
+        }
+        return materialSlots.ToArray();
     }
 
     private void InitializeExtrusionFace(FaceHandle face, int materialSlot)

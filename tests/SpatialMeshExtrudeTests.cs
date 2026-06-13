@@ -82,7 +82,7 @@ public sealed class SpatialMeshExtrudeTests
     }
 
     [Fact]
-    public void ExtrudeFace_InheritsMaterialAndMarksGeneratedFacesUvsUninitialized()
+    public void ExtrudeFace_CapInheritsSourceMaterialAndBoundarySidesAreUntextured()
     {
         using SpatialMesh mesh = BuildQuad(out FaceHandle face, out _);
         mesh.SetFaceMaterialSlot(face, 23);
@@ -90,11 +90,41 @@ public sealed class SpatialMeshExtrudeTests
 
         SpatialMesh.ExtrudeFaceResult result = mesh.ExtrudeFace(face, 1f);
 
-        foreach (FaceHandle generatedFace in result.SideFaces.Append(result.CapFace))
-        {
-            Assert.Equal(23, mesh.GetFaceMaterialSlot(generatedFace));
-            Assert.False(mesh.AreFaceUvsInitialized(generatedFace));
-        }
+        Assert.Equal(23, mesh.GetFaceMaterialSlot(result.CapFace));
+        Assert.All(
+            result.SideFaces,
+            side => Assert.Equal(SpatialMesh.UntexturedMaterialSlot, mesh.GetFaceMaterialSlot(side))
+        );
+        Assert.All(
+            result.SideFaces.Append(result.CapFace),
+            generatedFace => Assert.False(mesh.AreFaceUvsInitialized(generatedFace))
+        );
+        mesh.ValidateConsistency();
+    }
+
+    [Fact]
+    public void ExtrudeFace_SideInheritsMaterialFromNeighborAcrossOriginalEdge()
+    {
+        using SpatialMesh mesh = BuildAdjacentQuads(
+            out FaceHandle source,
+            out FaceHandle neighbor,
+            out VertexHandle sharedA,
+            out VertexHandle sharedB
+        );
+        mesh.SetFaceMaterialSlot(source, 17);
+        mesh.SetFaceMaterialSlot(neighbor, 29);
+
+        SpatialMesh.ExtrudeFaceResult result = mesh.ExtrudeFace(source, 1f);
+
+        FaceHandle sharedSide = Assert.Single(
+            result.SideFaces.Where(side => FindFaceEdge(mesh, side, sharedA, sharedB) is not null)
+        );
+        Assert.Equal(29, mesh.GetFaceMaterialSlot(sharedSide));
+        Assert.Equal(17, mesh.GetFaceMaterialSlot(result.CapFace));
+        Assert.All(
+            result.SideFaces.Where(side => side != sharedSide),
+            side => Assert.Equal(SpatialMesh.UntexturedMaterialSlot, mesh.GetFaceMaterialSlot(side))
+        );
         mesh.ValidateConsistency();
     }
 
