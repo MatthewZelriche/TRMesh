@@ -26,7 +26,10 @@ public sealed class SpatialMeshExtrudeTests
     [Fact]
     public void ExtrudeFace_PositionsCapAlongFaceNormal()
     {
-        using SpatialMesh mesh = BuildQuad(out FaceHandle face, out VertexHandle[] originalVertices);
+        using SpatialMesh mesh = BuildQuad(
+            out FaceHandle face,
+            out VertexHandle[] originalVertices
+        );
         Vector3 normal = mesh.ComputeFaceNormal(face);
         Vector3[] originalPositions = originalVertices.Select(mesh.GetVertexPosition).ToArray();
 
@@ -46,7 +49,10 @@ public sealed class SpatialMeshExtrudeTests
     [Fact]
     public void ExtrudeFace_NegativeDistanceMovesOppositeFaceNormal()
     {
-        using SpatialMesh mesh = BuildQuad(out FaceHandle face, out VertexHandle[] originalVertices);
+        using SpatialMesh mesh = BuildQuad(
+            out FaceHandle face,
+            out VertexHandle[] originalVertices
+        );
         Vector3 normal = mesh.ComputeFaceNormal(face);
         Vector3 originalPosition = mesh.GetVertexPosition(originalVertices[0]);
 

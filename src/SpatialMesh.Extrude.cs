@@ -58,12 +58,9 @@ public partial class SpatialMesh
         for (int i = 0; i < originalVertices.Length; i++)
         {
             int next = (i + 1) % originalVertices.Length;
-            FaceHandle sideFace = AddFace([
-                originalVertices[i],
-                originalVertices[next],
-                newVertices[next],
-                newVertices[i],
-            ]);
+            FaceHandle sideFace = AddFace(
+                [originalVertices[i], originalVertices[next], newVertices[next], newVertices[i]]
+            );
             InitializeExtrusionFace(sideFace, sideMaterialSlots[i]);
             sideFaces[i] = sideFace;
         }

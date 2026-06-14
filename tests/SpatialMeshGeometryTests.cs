@@ -19,11 +19,13 @@ public sealed class SpatialMeshGeometryTests
     public void ComputeFaceNormal_DegenerateFaceReturnsZero()
     {
         using SpatialMesh mesh = new();
-        FaceHandle face = mesh.AddFace([
-            mesh.AddVertex(Vector3.Zero),
-            mesh.AddVertex(Vector3.UnitX),
-            mesh.AddVertex(Vector3.UnitX * 2f),
-        ]);
+        FaceHandle face = mesh.AddFace(
+            [
+                mesh.AddVertex(Vector3.Zero),
+                mesh.AddVertex(Vector3.UnitX),
+                mesh.AddVertex(Vector3.UnitX * 2f),
+            ]
+        );
 
         Assert.Equal(Vector3.Zero, mesh.ComputeFaceNormal(face));
     }
@@ -51,12 +53,14 @@ public sealed class SpatialMeshGeometryTests
     private static SpatialMesh BuildQuad(out FaceHandle face)
     {
         SpatialMesh mesh = new();
-        face = mesh.AddFace([
-            mesh.AddVertex(new Vector3(0f, 0f, 0f)),
-            mesh.AddVertex(new Vector3(0f, 0f, 2f)),
-            mesh.AddVertex(new Vector3(3f, 0f, 2f)),
-            mesh.AddVertex(new Vector3(3f, 0f, 0f)),
-        ]);
+        face = mesh.AddFace(
+            [
+                mesh.AddVertex(new Vector3(0f, 0f, 0f)),
+                mesh.AddVertex(new Vector3(0f, 0f, 2f)),
+                mesh.AddVertex(new Vector3(3f, 0f, 2f)),
+                mesh.AddVertex(new Vector3(3f, 0f, 0f)),
+            ]
+        );
         return mesh;
     }
 

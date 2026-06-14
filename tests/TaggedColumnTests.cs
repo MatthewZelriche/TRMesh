@@ -94,8 +94,8 @@ public class TaggedColumnTests
     {
         using var mesh = new HalfEdgeMesh();
         mesh.Vertices.RegisterNativeColumn<Vector3, Position>();
-        Assert.Throws<InvalidOperationException>(() =>
-            mesh.Vertices.RegisterNativeColumn<Vector3, Position>()
+        Assert.Throws<InvalidOperationException>(
+            () => mesh.Vertices.RegisterNativeColumn<Vector3, Position>()
         );
     }
 

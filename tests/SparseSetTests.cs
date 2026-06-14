@@ -445,9 +445,8 @@ public class SparseSetTests
             sparse[handle.Index]
             ?? throw new InvalidOperationException("SparseSet entry was null.");
         FieldInfo versionField =
-            entry.GetType().GetField("Version") ?? throw new InvalidOperationException(
-                "SparseEntry.Version was not found."
-            );
+            entry.GetType().GetField("Version")
+            ?? throw new InvalidOperationException("SparseEntry.Version was not found.");
         versionField.SetValue(entry, generation);
         sparse[handle.Index] = entry;
         return new VertexHandle(handle.Index, generation);

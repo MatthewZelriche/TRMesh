@@ -13,11 +13,11 @@ namespace TREditorSharp.Tests;
 public class BuilderRoundTripTests
 {
     public static TheoryData<BlockOptions> BlockCases { get; } =
-    [
-        new() { Min = new Vector3(0, 0, 0), Max = new Vector3(1, 1, 1) },
-        new() { Min = new Vector3(-2, -3, -4), Max = new Vector3(2, 3, 4) },
-        new() { Min = new Vector3(10, 20, 30), Max = new Vector3(11, 22, 33) },
-    ];
+        [
+            new() { Min = new Vector3(0, 0, 0), Max = new Vector3(1, 1, 1) },
+            new() { Min = new Vector3(-2, -3, -4), Max = new Vector3(2, 3, 4) },
+            new() { Min = new Vector3(10, 20, 30), Max = new Vector3(11, 22, 33) },
+        ];
 
     [Theory]
     [MemberData(nameof(BlockCases))]
@@ -27,48 +27,48 @@ public class BuilderRoundTripTests
     }
 
     public static TheoryData<CylinderOptions> CylinderCases { get; } =
-    [
-        new()
-        {
-            Center = Vector3.Zero,
-            RadiusX = 1f,
-            RadiusZ = 1f,
-            Height = 2f,
-            RadialSegments = 3,
-        },
-        new()
-        {
-            Center = Vector3.Zero,
-            RadiusX = 1f,
-            RadiusZ = 1f,
-            Height = 2f,
-            RadialSegments = 8,
-        },
-        new()
-        {
-            Center = new Vector3(5, -1, 2),
-            RadiusX = 0.5f,
-            RadiusZ = 0.5f,
-            Height = 4f,
-            RadialSegments = 32,
-        },
-        new()
-        {
-            Center = Vector3.Zero,
-            RadiusX = 1f,
-            RadiusZ = 2f,
-            Height = 2f,
-            RadialSegments = 4,
-        },
-        new()
-        {
-            Center = new Vector3(5, -1, 2),
-            RadiusX = 0.5f,
-            RadiusZ = 1.5f,
-            Height = 4f,
-            RadialSegments = 32,
-        },
-    ];
+        [
+            new()
+            {
+                Center = Vector3.Zero,
+                RadiusX = 1f,
+                RadiusZ = 1f,
+                Height = 2f,
+                RadialSegments = 3,
+            },
+            new()
+            {
+                Center = Vector3.Zero,
+                RadiusX = 1f,
+                RadiusZ = 1f,
+                Height = 2f,
+                RadialSegments = 8,
+            },
+            new()
+            {
+                Center = new Vector3(5, -1, 2),
+                RadiusX = 0.5f,
+                RadiusZ = 0.5f,
+                Height = 4f,
+                RadialSegments = 32,
+            },
+            new()
+            {
+                Center = Vector3.Zero,
+                RadiusX = 1f,
+                RadiusZ = 2f,
+                Height = 2f,
+                RadialSegments = 4,
+            },
+            new()
+            {
+                Center = new Vector3(5, -1, 2),
+                RadiusX = 0.5f,
+                RadiusZ = 1.5f,
+                Height = 4f,
+                RadialSegments = 32,
+            },
+        ];
 
     [Theory]
     [MemberData(nameof(CylinderCases))]
@@ -78,29 +78,29 @@ public class BuilderRoundTripTests
     }
 
     public static TheoryData<UvSphereOptions> UvSphereCases { get; } =
-    [
-        new()
-        {
-            Center = Vector3.Zero,
-            Radius = 1f,
-            LatSegments = 2,
-            LonSegments = 3,
-        },
-        new()
-        {
-            Center = Vector3.Zero,
-            Radius = 1f,
-            LatSegments = 8,
-            LonSegments = 12,
-        },
-        new()
-        {
-            Center = new Vector3(-3, 4, 0.25f),
-            Radius = 2f,
-            LatSegments = 16,
-            LonSegments = 32,
-        },
-    ];
+        [
+            new()
+            {
+                Center = Vector3.Zero,
+                Radius = 1f,
+                LatSegments = 2,
+                LonSegments = 3,
+            },
+            new()
+            {
+                Center = Vector3.Zero,
+                Radius = 1f,
+                LatSegments = 8,
+                LonSegments = 12,
+            },
+            new()
+            {
+                Center = new Vector3(-3, 4, 0.25f),
+                Radius = 2f,
+                LatSegments = 16,
+                LonSegments = 32,
+            },
+        ];
 
     [Theory]
     [MemberData(nameof(UvSphereCases))]
@@ -110,30 +110,30 @@ public class BuilderRoundTripTests
     }
 
     public static TheoryData<PlaneOptions> PlaneCases { get; } =
-    [
-        new()
-        {
-            Center = Vector3.Zero,
-            Width = 1f,
-            Height = 1f,
-        },
-        new()
-        {
-            Center = new Vector3(2, 0, -1),
-            Width = 3f,
-            Height = 4f,
-            WidthSegments = 3,
-            HeightSegments = 4,
-        },
-        new()
-        {
-            Center = Vector3.Zero,
-            Width = 5f,
-            Height = 1f,
-            WidthSegments = 1,
-            HeightSegments = 10,
-        },
-    ];
+        [
+            new()
+            {
+                Center = Vector3.Zero,
+                Width = 1f,
+                Height = 1f,
+            },
+            new()
+            {
+                Center = new Vector3(2, 0, -1),
+                Width = 3f,
+                Height = 4f,
+                WidthSegments = 3,
+                HeightSegments = 4,
+            },
+            new()
+            {
+                Center = Vector3.Zero,
+                Width = 5f,
+                Height = 1f,
+                WidthSegments = 1,
+                HeightSegments = 10,
+            },
+        ];
 
     [Theory]
     [MemberData(nameof(PlaneCases))]

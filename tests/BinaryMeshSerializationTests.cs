@@ -150,8 +150,8 @@ public sealed class BinaryMeshSerializationTests
 
         using var stream = new MemoryStream();
 
-        Assert.Throws<InvalidOperationException>(() =>
-            new BinaryMeshWriter().Write(mesh, stream, options)
+        Assert.Throws<InvalidOperationException>(
+            () => new BinaryMeshWriter().Write(mesh, stream, options)
         );
         Assert.Equal(0, stream.Length);
     }

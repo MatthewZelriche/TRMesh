@@ -84,12 +84,14 @@ public sealed class SpatialMeshInsetTests
     private static SpatialMesh BuildRectangle(float width, float height, out FaceHandle face)
     {
         SpatialMesh mesh = new();
-        face = mesh.AddFace([
-            mesh.AddVertex(Vector3.Zero),
-            mesh.AddVertex(new Vector3(0, 0, height)),
-            mesh.AddVertex(new Vector3(width, 0, height)),
-            mesh.AddVertex(new Vector3(width, 0, 0)),
-        ]);
+        face = mesh.AddFace(
+            [
+                mesh.AddVertex(Vector3.Zero),
+                mesh.AddVertex(new Vector3(0, 0, height)),
+                mesh.AddVertex(new Vector3(width, 0, height)),
+                mesh.AddVertex(new Vector3(width, 0, 0)),
+            ]
+        );
         return mesh;
     }
 

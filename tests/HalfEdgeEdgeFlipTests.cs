@@ -72,10 +72,7 @@ public sealed class HalfEdgeEdgeFlipTests
     [Fact]
     public void FlipEdge_NonTriangleFaceReturnsFalseWithoutMutation()
     {
-        using HalfEdgeMesh mesh = BuildTriangleAndQuad(
-            out VertexHandle a,
-            out VertexHandle c
-        );
+        using HalfEdgeMesh mesh = BuildTriangleAndQuad(out VertexHandle a, out VertexHandle c);
         HalfEdgeHandle edge = FindEdge(mesh, a, c);
 
         Assert.False(mesh.FlipEdge(edge));
@@ -147,10 +144,7 @@ public sealed class HalfEdgeEdgeFlipTests
         return mesh;
     }
 
-    private static HalfEdgeMesh BuildTriangleAndQuad(
-        out VertexHandle a,
-        out VertexHandle c
-    )
+    private static HalfEdgeMesh BuildTriangleAndQuad(out VertexHandle a, out VertexHandle c)
     {
         HalfEdgeMesh mesh = new();
         a = mesh.Vertices.Allocate();
@@ -170,14 +164,7 @@ public sealed class HalfEdgeEdgeFlipTests
         out VertexHandle d
     )
     {
-        HalfEdgeMesh mesh = BuildTwoTriangleQuad(
-            out a,
-            out b,
-            out c,
-            out d,
-            out _,
-            out _
-        );
+        HalfEdgeMesh mesh = BuildTwoTriangleQuad(out a, out b, out c, out d, out _, out _);
         VertexHandle x = mesh.Vertices.Allocate();
         mesh.AddFace([b, d, x]);
         return mesh;
@@ -210,10 +197,7 @@ public sealed class HalfEdgeEdgeFlipTests
         foreach (HalfEdgeHandle edge in mesh.EnumerateLiveHalfEdges())
         {
             HalfEdge halfEdge = mesh.GetHalfEdge(edge);
-            if (
-                halfEdge.Origin == origin
-                && mesh.GetHalfEdge(halfEdge.Twin).Origin == destination
-            )
+            if (halfEdge.Origin == origin && mesh.GetHalfEdge(halfEdge.Twin).Origin == destination)
             {
                 return edge;
             }

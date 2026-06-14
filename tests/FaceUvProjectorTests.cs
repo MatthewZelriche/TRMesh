@@ -23,12 +23,7 @@ public sealed class FaceUvProjectorTests
         Vector3 vAxis
     )
     {
-        using SpatialMesh mesh = BuildFace(
-            Vector3.Zero,
-            uAxis,
-            uAxis + vAxis,
-            vAxis
-        );
+        using SpatialMesh mesh = BuildFace(Vector3.Zero, uAxis, uAxis + vAxis, vAxis);
         FaceHandle face = GetOnlyFace(mesh);
         List<ProjectedFaceCornerUv> projected = [];
 
@@ -45,12 +40,7 @@ public sealed class FaceUvProjectorTests
         float diagonal = 1f / MathF.Sqrt(2f);
         Vector3 uAxis = -Vector3.UnitZ;
         Vector3 vAxis = new(-diagonal, diagonal, 0f);
-        using SpatialMesh mesh = BuildFace(
-            Vector3.Zero,
-            uAxis,
-            uAxis + vAxis,
-            vAxis
-        );
+        using SpatialMesh mesh = BuildFace(Vector3.Zero, uAxis, uAxis + vAxis, vAxis);
         FaceHandle face = GetOnlyFace(mesh);
         List<ProjectedFaceCornerUv> projected = [];
 
@@ -83,14 +73,7 @@ public sealed class FaceUvProjectorTests
     [Fact]
     public void TryProject_NgonProjectsEveryOriginalFaceCorner()
     {
-        Vector2[] expected =
-        [
-            new(0f, 0f),
-            new(2f, 0f),
-            new(3f, 1f),
-            new(1.5f, 2f),
-            new(0f, 1f),
-        ];
+        Vector2[] expected = [new(0f, 0f), new(2f, 0f), new(3f, 1f), new(1.5f, 2f), new(0f, 1f)];
         using SpatialMesh mesh = BuildFace(
             expected.Select(uv => new Vector3(uv.X, 0f, -uv.Y)).ToArray()
         );

@@ -7,7 +7,10 @@ public sealed class SpatialMeshExtrusionRingTests
     [Fact]
     public void BuildExtrusionRing_QuadCreatesSideRingAndPlacedCap()
     {
-        using SpatialMesh mesh = BuildQuad(out FaceHandle face, out VertexHandle[] originalVertices);
+        using SpatialMesh mesh = BuildQuad(
+            out FaceHandle face,
+            out VertexHandle[] originalVertices
+        );
 
         SpatialMesh.RingResult result = mesh.BuildExtrusionRing(
             face,
@@ -127,12 +130,13 @@ public sealed class SpatialMeshExtrusionRingTests
         int edgesBefore = CountEdges(mesh);
         int facesBefore = CountFaces(mesh);
 
-        Assert.Throws<InvalidOperationException>(() =>
-            mesh.BuildExtrusionRing(
-                face,
-                (index, position) =>
-                    index == 2 ? throw new InvalidOperationException() : position
-            )
+        Assert.Throws<InvalidOperationException>(
+            () =>
+                mesh.BuildExtrusionRing(
+                    face,
+                    (index, position) =>
+                        index == 2 ? throw new InvalidOperationException() : position
+                )
         );
 
         Assert.True(mesh.IsFaceAlive(face));
@@ -150,8 +154,8 @@ public sealed class SpatialMeshExtrusionRingTests
         int verticesBefore = CountVertices(mesh);
         int edgesBefore = CountEdges(mesh);
 
-        Assert.Throws<ArgumentException>(() =>
-            mesh.BuildExtrusionRing(face, (_, position) => position)
+        Assert.Throws<ArgumentException>(
+            () => mesh.BuildExtrusionRing(face, (_, position) => position)
         );
 
         Assert.Equal(verticesBefore, CountVertices(mesh));

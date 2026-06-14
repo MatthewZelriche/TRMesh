@@ -124,11 +124,9 @@ public sealed class HalfEdgeEdgeRemovalTests
     private static HalfEdgeMesh BuildTriangle(out FaceHandle face)
     {
         HalfEdgeMesh mesh = new();
-        face = mesh.AddFace([
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-        ]);
+        face = mesh.AddFace(
+            [mesh.Vertices.Allocate(), mesh.Vertices.Allocate(), mesh.Vertices.Allocate()]
+        );
         return mesh;
     }
 

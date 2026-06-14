@@ -169,18 +169,22 @@ public sealed class HalfEdgeFaceSplitTests
     )
     {
         HalfEdgeMesh mesh = new();
-        first = mesh.AddFace([
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-        ]);
-        second = mesh.AddFace([
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-            mesh.Vertices.Allocate(),
-        ]);
+        first = mesh.AddFace(
+            [
+                mesh.Vertices.Allocate(),
+                mesh.Vertices.Allocate(),
+                mesh.Vertices.Allocate(),
+                mesh.Vertices.Allocate(),
+            ]
+        );
+        second = mesh.AddFace(
+            [
+                mesh.Vertices.Allocate(),
+                mesh.Vertices.Allocate(),
+                mesh.Vertices.Allocate(),
+                mesh.Vertices.Allocate(),
+            ]
+        );
         return mesh;
     }
 

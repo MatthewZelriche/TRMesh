@@ -152,8 +152,8 @@ public class StorageTests
     {
         using var mesh = new HalfEdgeMesh();
         mesh.Vertices.RegisterNativeColumn<Vector3>();
-        Assert.Throws<InvalidOperationException>(() =>
-            mesh.Vertices.RegisterNativeColumn<Vector3>()
+        Assert.Throws<InvalidOperationException>(
+            () => mesh.Vertices.RegisterNativeColumn<Vector3>()
         );
     }
 
