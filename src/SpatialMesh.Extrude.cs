@@ -22,7 +22,11 @@ public partial class SpatialMesh
     /// material across its corresponding original edge, or is untextured at a boundary. Shared by
     /// face extrusion and inset operations.
     /// </summary>
-    internal RingResult BuildExtrusionRing(FaceHandle face, Func<int, Vector3, Vector3> placeVertex)
+    internal RingResult BuildExtrusionRing(
+        FaceHandle face,
+        Func<int, Vector3, Vector3> placeVertex,
+        bool inheritNeighborMaterials = true
+    )
     {
         ArgumentNullException.ThrowIfNull(placeVertex);
 
@@ -37,7 +41,9 @@ public partial class SpatialMesh
             );
 
         int capMaterialSlot = GetFaceMaterialSlot(face);
-        int[] sideMaterialSlots = CollectExtrusionSideMaterialSlots(face);
+        int[] sideMaterialSlots = inheritNeighborMaterials
+            ? CollectExtrusionSideMaterialSlots(face)
+            : Enumerable.Repeat(capMaterialSlot, originalVertices.Length).ToArray();
         Vector3[] newPositions = new Vector3[originalVertices.Length];
         for (int i = 0; i < originalVertices.Length; i++)
             newPositions[i] = placeVertex(i, GetVertexPosition(originalVertices[i]));
