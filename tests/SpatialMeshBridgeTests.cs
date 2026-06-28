@@ -80,6 +80,8 @@ public sealed class SpatialMeshBridgeTests
             result.Faces,
             face => Assert.NotEqual(Vector3.Zero, mesh.ComputeFaceNormal(face))
         );
+        foreach (HalfEdgeHandle edge in mesh.EnumerateLiveHalfEdges())
+            Assert.True(mesh.IsFaceAlive(mesh.GetHalfEdge(edge).Face));
         mesh.ValidateConsistency();
     }
 

@@ -35,28 +35,48 @@ public partial class SpatialMesh
         left[segments] = plan.SecondDestination;
         right[segments] = plan.SecondOrigin;
 
+        bool hasArch = archAngleDegrees > 1e-5f;
+        if (!hasArch && !plan.LeftConnector.IsNull)
+        {
+            VertexHandle[] connector = SubdivideBridgeConnector(plan.LeftConnector, segments);
+            for (int row = 1; row < segments; row++)
+                left[row] = connector[segments - row];
+        }
+        if (!hasArch && !plan.RightConnector.IsNull)
+        {
+            VertexHandle[] connector = SubdivideBridgeConnector(plan.RightConnector, segments);
+            for (int row = 1; row < segments; row++)
+                right[row] = connector[row];
+        }
+
         List<VertexHandle> newVertices = [];
         for (int row = 1; row < segments; row++)
         {
             float t = row / (float)segments;
-            left[row] = AddVertex(
-                EvaluateBridgeArc(
-                    plan.FirstOriginPosition,
-                    plan.SecondDestinationPosition,
-                    plan.ArchDirection,
-                    t,
-                    archAngleDegrees
-                )
-            );
-            right[row] = AddVertex(
-                EvaluateBridgeArc(
-                    plan.FirstDestinationPosition,
-                    plan.SecondOriginPosition,
-                    plan.ArchDirection,
-                    t,
-                    archAngleDegrees
-                )
-            );
+            if (left[row].IsNull)
+            {
+                left[row] = AddVertex(
+                    EvaluateBridgeArc(
+                        plan.FirstOriginPosition,
+                        plan.SecondDestinationPosition,
+                        plan.ArchDirection,
+                        t,
+                        archAngleDegrees
+                    )
+                );
+            }
+            if (right[row].IsNull)
+            {
+                right[row] = AddVertex(
+                    EvaluateBridgeArc(
+                        plan.FirstDestinationPosition,
+                        plan.SecondOriginPosition,
+                        plan.ArchDirection,
+                        t,
+                        archAngleDegrees
+                    )
+                );
+            }
             newVertices.Add(left[row]);
             newVertices.Add(right[row]);
         }
@@ -70,15 +90,14 @@ public partial class SpatialMesh
             faces.Add(face);
         }
 
-        bool hasArch = archAngleDegrees > 1e-5f;
-        if (segments > 1 && hasArch && plan.HasLeftConnector)
+        if (segments > 1 && hasArch && !plan.LeftConnector.IsNull)
         {
             FaceHandle face = AddFace(left);
             SetFaceMaterialSlot(face, plan.MaterialSlot);
             SetFaceUvsInitialized(face, false);
             faces.Add(face);
         }
-        if (segments > 1 && hasArch && plan.HasRightConnector)
+        if (segments > 1 && hasArch && !plan.RightConnector.IsNull)
         {
             VertexHandle[] reversedRight = right.Reverse().ToArray();
             FaceHandle face = AddFace(reversedRight);
@@ -135,8 +154,16 @@ public partial class SpatialMesh
                 secondOrigin,
                 secondDestination,
             }.Count != 4
-            || !TryGetBridgeConnector(secondDestination, firstOrigin, out bool hasLeftConnector)
-            || !TryGetBridgeConnector(firstDestination, secondOrigin, out bool hasRightConnector)
+            || !TryGetBridgeConnector(
+                secondDestination,
+                firstOrigin,
+                out HalfEdgeHandle leftConnector
+            )
+            || !TryGetBridgeConnector(
+                firstDestination,
+                secondOrigin,
+                out HalfEdgeHandle rightConnector
+            )
         )
         {
             return false;
@@ -203,8 +230,8 @@ public partial class SpatialMesh
             archDirection,
             GetFaceMaterialSlot(firstFace),
             AreFaceUvsInitialized(firstFace),
-            hasLeftConnector,
-            hasRightConnector
+            leftConnector,
+            rightConnector
         );
         return true;
     }
@@ -223,10 +250,10 @@ public partial class SpatialMesh
     private bool TryGetBridgeConnector(
         VertexHandle origin,
         VertexHandle destination,
-        out bool exists
+        out HalfEdgeHandle connector
     )
     {
-        exists = false;
+        connector = HalfEdgeHandle.Null;
         foreach (HalfEdgeHandle edge in HalfEdges)
         {
             HalfEdge data = HalfEdges[edge];
@@ -238,11 +265,46 @@ public partial class SpatialMesh
             {
                 if (!data.Face.IsNull)
                     return false;
-                exists = true;
+                connector = edge;
                 return true;
             }
         }
         return true;
+    }
+
+    private VertexHandle[] SubdivideBridgeConnector(HalfEdgeHandle connector, int segments)
+    {
+        VertexHandle[] vertices = new VertexHandle[segments + 1];
+        HalfEdge data = HalfEdges[connector];
+        VertexHandle destination = HalfEdges[data.Twin].Origin;
+        vertices[0] = data.Origin;
+        vertices[segments] = destination;
+
+        HalfEdgeHandle remaining = connector;
+        for (int index = 1; index < segments; index++)
+        {
+            VertexHandle inserted = SplitEdge(remaining, 1f / (segments - index + 1));
+            vertices[index] = inserted;
+            remaining = FindDirectedBridgeEdge(inserted, destination);
+            if (remaining.IsNull)
+            {
+                throw new InvalidOperationException(
+                    "Split bridge connector did not retain its destination."
+                );
+            }
+        }
+        return vertices;
+    }
+
+    private HalfEdgeHandle FindDirectedBridgeEdge(VertexHandle origin, VertexHandle destination)
+    {
+        foreach (HalfEdgeHandle edge in HalfEdgesAroundVertex(origin))
+        {
+            HalfEdge data = HalfEdges[edge];
+            if (HalfEdges.IsAlive(data.Twin) && HalfEdges[data.Twin].Origin == destination)
+                return edge;
+        }
+        return HalfEdgeHandle.Null;
     }
 
     private bool TryGetBoundaryEdge(
@@ -329,8 +391,8 @@ public partial class SpatialMesh
         Vector3 ArchDirection,
         int MaterialSlot,
         bool SourceHadInitializedUvs,
-        bool HasLeftConnector,
-        bool HasRightConnector
+        HalfEdgeHandle LeftConnector,
+        HalfEdgeHandle RightConnector
     );
 
     public readonly record struct BridgeEdgesResult(
