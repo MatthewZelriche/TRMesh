@@ -14,7 +14,7 @@ public class MeshWriterOptions
 {
     /// <summary>
     /// When <c>true</c> (default), disposing the text writer does not close the destination
-    /// stream passed to <see cref="IMeshWriter.Write"/>; the caller owns the stream lifecycle.
+    /// stream passed to a mesh writer; the caller owns the stream lifecycle.
     /// </summary>
     public bool LeaveStreamOpen { get; init; } = true;
 

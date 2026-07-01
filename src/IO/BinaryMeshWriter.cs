@@ -6,8 +6,6 @@ public sealed class BinaryMeshWriter
     const int Version = 1;
     const int NullRef = -1;
 
-    public string FileExtension => "trmb";
-
     public void Write(
         HalfEdgeMesh mesh,
         Stream destination,

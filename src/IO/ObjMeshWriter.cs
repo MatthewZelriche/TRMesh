@@ -11,10 +11,6 @@ public sealed class ObjMeshWriter
 {
     private const string FloatFormat = "G9";
 
-    /// <inheritdoc />
-    public string FileExtension => "obj";
-
-    /// <inheritdoc />
     public void Write(SpatialMesh mesh, Stream destination, MeshWriterOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(mesh);
