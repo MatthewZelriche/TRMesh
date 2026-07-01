@@ -99,7 +99,7 @@ public partial class SpatialMesh
         }
         if (segments > 1 && hasArch && !plan.RightConnector.IsNull)
         {
-            VertexHandle[] reversedRight = right.Reverse().ToArray();
+            VertexHandle[] reversedRight = Enumerable.Reverse(right).ToArray();
             FaceHandle face = AddFace(reversedRight);
             SetFaceMaterialSlot(face, plan.MaterialSlot);
             SetFaceUvsInitialized(face, false);
