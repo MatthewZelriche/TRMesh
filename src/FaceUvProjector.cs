@@ -15,6 +15,42 @@ public static class FaceUvProjector
     private const float DegenerateNormalLengthSquared = 1e-12f;
 
     /// <summary>
+    /// Projects and applies default UVs to <paramref name="face"/> and marks its UVs initialized.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> when projection succeeded; otherwise <c>false</c> without changing the face's
+    /// UV values or initialized state.
+    /// </returns>
+    public static bool TryProjectAndApply(SpatialMesh mesh, FaceHandle face)
+    {
+        List<ProjectedFaceCornerUv> scratch = [];
+        return TryProjectAndApply(mesh, face, scratch);
+    }
+
+    /// <summary>
+    /// Projects and applies default UVs using a caller-owned scratch list.
+    /// </summary>
+    /// <remarks>The scratch list is cleared before use and retains the successful projection.</remarks>
+    public static bool TryProjectAndApply(
+        SpatialMesh mesh,
+        FaceHandle face,
+        List<ProjectedFaceCornerUv> scratch
+    )
+    {
+        ArgumentNullException.ThrowIfNull(mesh);
+        ArgumentNullException.ThrowIfNull(scratch);
+
+        scratch.Clear();
+        if (!TryProject(mesh, face, scratch))
+            return false;
+
+        foreach (ProjectedFaceCornerUv corner in scratch)
+            mesh.SetFaceCornerUv(corner.Corner, corner.Uv);
+        mesh.SetFaceUvsInitialized(face, true);
+        return true;
+    }
+
+    /// <summary>
     /// Reprojects every UV-initialized polygon face adjacent to at least one supplied vertex.
     /// Returns the number of faces successfully reprojected.
     /// </summary>
@@ -46,12 +82,9 @@ public static class FaceUvProjector
         int reprojectedCount = 0;
         foreach (FaceHandle face in affectedFaces)
         {
-            projected.Clear();
-            if (!TryProject(mesh, face, projected))
+            if (!TryProjectAndApply(mesh, face, projected))
                 continue;
 
-            foreach (ProjectedFaceCornerUv corner in projected)
-                mesh.SetFaceCornerUv(corner.Corner, corner.Uv);
             reprojectedCount++;
         }
 

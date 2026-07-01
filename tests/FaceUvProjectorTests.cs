@@ -92,6 +92,37 @@ public sealed class FaceUvProjectorTests
     }
 
     [Fact]
+    public void TryProjectAndApply_StoresProjectionAndMarksFaceInitialized()
+    {
+        using SpatialMesh mesh = BuildFace(
+            Vector3.Zero,
+            Vector3.UnitX,
+            Vector3.UnitX + Vector3.UnitY,
+            Vector3.UnitY
+        );
+        FaceHandle face = GetOnlyFace(mesh);
+        List<ProjectedFaceCornerUv> expected = [];
+        Assert.True(FaceUvProjector.TryProject(mesh, face, expected));
+
+        Assert.True(FaceUvProjector.TryProjectAndApply(mesh, face));
+
+        Assert.True(mesh.AreFaceUvsInitialized(face));
+        foreach (ProjectedFaceCornerUv corner in expected)
+            AssertVectorApproximately(corner.Uv, mesh.GetFaceCornerUv(corner.Corner));
+    }
+
+    [Fact]
+    public void TryProjectAndApply_DegenerateFaceDoesNotChangeInitialization()
+    {
+        using SpatialMesh mesh = BuildFace(Vector3.Zero, Vector3.UnitX, Vector3.UnitX * 2f);
+        FaceHandle face = GetOnlyFace(mesh);
+
+        Assert.False(FaceUvProjector.TryProjectAndApply(mesh, face));
+
+        Assert.False(mesh.AreFaceUvsInitialized(face));
+    }
+
+    [Fact]
     public void ReprojectInitializedFacesAroundVertices_UpdatesFaceAfterGeometryEdit()
     {
         using SpatialMesh mesh = BuildFace(

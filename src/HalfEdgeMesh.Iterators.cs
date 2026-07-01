@@ -7,6 +7,64 @@ using TREditorSharp.Storage;
 public partial class HalfEdgeMesh
 {
     /// <summary>
+    /// Iterates one canonical half-edge for every live logical edge in unspecified order.
+    /// </summary>
+    /// <remarks>
+    /// Each yielded handle is the lower-indexed member of a live twin pair. Do not mutate
+    /// half-edge topology while iterating.
+    /// </remarks>
+    public CanonicalEdgeEnumerable EnumerateLiveEdges() => new(this);
+
+    /// <summary>
+    /// <c>foreach</c>-friendly wrapper produced by <see cref="EnumerateLiveEdges"/>.
+    /// </summary>
+    public readonly ref struct CanonicalEdgeEnumerable
+    {
+        private readonly HalfEdgeMesh _mesh;
+
+        internal CanonicalEdgeEnumerable(HalfEdgeMesh mesh)
+        {
+            _mesh = mesh;
+        }
+
+        public CanonicalEdgeEnumerator GetEnumerator() => new(_mesh);
+    }
+
+    /// <summary>
+    /// Stack-only enumerator that yields one canonical half-edge for every live twin pair.
+    /// </summary>
+    public ref struct CanonicalEdgeEnumerator
+    {
+        private readonly HalfEdgeMesh _mesh;
+        private TopologyStorage<HalfEdgeTag, HalfEdge>.LiveHandleEnumerator _halfEdges;
+        private HalfEdgeHandle _current;
+
+        internal CanonicalEdgeEnumerator(HalfEdgeMesh mesh)
+        {
+            _mesh = mesh;
+            _halfEdges = mesh.HalfEdges.GetEnumerator();
+            _current = default;
+        }
+
+        public readonly HalfEdgeHandle Current => _current;
+
+        public bool MoveNext()
+        {
+            while (_halfEdges.MoveNext())
+            {
+                HalfEdgeHandle candidate = _halfEdges.Current;
+                if (_mesh.GetCanonicalEdge(candidate) != candidate)
+                    continue;
+
+                _current = candidate;
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Iterate the outgoing half-edges around <paramref name="vertex"/> in
     /// counter-clockwise order.
     ///

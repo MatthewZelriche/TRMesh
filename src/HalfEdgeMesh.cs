@@ -56,6 +56,47 @@ public partial class HalfEdgeMesh : IDisposable
     /// <summary>True when <paramref name="face"/> still refers to a live face.</summary>
     public bool IsFaceAlive(FaceHandle face) => _faces.IsAlive(face);
 
+    /// <summary>
+    /// Finds the directed half-edge from <paramref name="origin"/> to
+    /// <paramref name="destination"/>, or returns the null handle when the vertices are not
+    /// connected in that direction.
+    /// </summary>
+    /// <remarks>
+    /// Both vertices must be live. The lookup traverses only the outgoing ring around
+    /// <paramref name="origin"/>.
+    /// </remarks>
+    public HalfEdgeHandle FindHalfEdge(VertexHandle origin, VertexHandle destination)
+    {
+        if (!Vertices.IsAlive(origin))
+            throw new ArgumentException($"Vertex {origin} is not live.", nameof(origin));
+        if (!Vertices.IsAlive(destination))
+            throw new ArgumentException($"Vertex {destination} is not live.", nameof(destination));
+
+        return FindHalfEdgeBetweenUnchecked(origin, destination);
+    }
+
+    /// <summary>
+    /// Returns the canonical half-edge representing the same logical edge as
+    /// <paramref name="halfEdge"/>.
+    /// </summary>
+    /// <remarks>
+    /// The live half-edge with the lower slot index is canonical. The supplied half-edge and its
+    /// twin must both be live.
+    /// </remarks>
+    public HalfEdgeHandle GetCanonicalEdge(HalfEdgeHandle halfEdge)
+    {
+        if (!HalfEdges.IsAlive(halfEdge))
+            throw new ArgumentException($"Half-edge {halfEdge} is not live.", nameof(halfEdge));
+
+        HalfEdgeHandle twin = HalfEdges[halfEdge].Twin;
+        if (!HalfEdges.IsAlive(twin))
+            throw new InvalidOperationException(
+                $"Half-edge {halfEdge} has a null or dead twin {twin}."
+            );
+
+        return halfEdge.Index <= twin.Index ? halfEdge : twin;
+    }
+
     private bool _disposed;
 
     public HalfEdgeMesh()
