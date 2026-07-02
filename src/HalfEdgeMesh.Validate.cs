@@ -32,7 +32,7 @@ public partial class HalfEdgeMesh
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The mesh is in an inconsistent state.</exception>
-    internal void ValidateConsistency()
+    public void ValidateConsistency()
     {
         // Phase 1: per half-edge structural checks.
         foreach (var h in HalfEdges)

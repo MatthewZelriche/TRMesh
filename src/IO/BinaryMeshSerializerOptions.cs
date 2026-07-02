@@ -65,6 +65,22 @@ public sealed class BinaryMeshSerializerOptions
     /// </remarks>
     public bool ValidateOnRead { get; set; } = true;
 
+    /// <summary>Maximum live entities accepted in any one topology section.</summary>
+    /// <remarks>Per vertex/half-edge/face section</remarks>
+    public int MaximumEntityCount { get; set; } = 2_000_000;
+
+    /// <summary>Maximum component columns accepted in any one topology section.</summary>
+    /// <remarks>Headroom for future columns; the built-in format uses three.</remarks>
+    public int MaximumColumnCount { get; set; } = 1_024;
+
+    /// <summary>Maximum encoded byte length accepted for a column identifier.</summary>
+    /// <remarks>1 MiB per column id string.</remarks>
+    public int MaximumColumnIdBytes { get; set; } = 1_048_576;
+
+    /// <summary>Maximum payload byte length accepted for any one component column.</summary>
+    /// <remarks>512 MiB per column payload.</remarks>
+    public long MaximumColumnPayloadBytes { get; set; } = 536_870_912;
+
     internal static BinaryMeshSerializerOptions Default { get; } = new();
 }
 

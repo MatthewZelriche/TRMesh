@@ -136,6 +136,91 @@ public sealed class BinaryMeshSerializationTests
     }
 
     [Fact]
+    public void Read_RejectsEntityCountAboveConfiguredLimit()
+    {
+        var options = new BinaryMeshSerializerOptions { MaximumEntityCount = 1 };
+        using MemoryStream stream = WritePartialFile(writer =>
+        {
+            writer.Write((byte)BinaryMeshEntityKind.Vertex);
+            writer.Write(2);
+        });
+
+        Assert.Throws<FormatException>(() => new BinaryMeshReader().Read(stream, options));
+    }
+
+    [Fact]
+    public void Read_RejectsTruncatedEntityRecordsBeforeAllocatingTopology()
+    {
+        using MemoryStream stream = WritePartialFile(writer =>
+        {
+            writer.Write((byte)BinaryMeshEntityKind.Vertex);
+            writer.Write(1);
+        });
+
+        Assert.Throws<EndOfStreamException>(() => new BinaryMeshReader().Read(stream));
+    }
+
+    [Fact]
+    public void Read_RejectsColumnCountAboveConfiguredLimit()
+    {
+        var options = new BinaryMeshSerializerOptions { MaximumColumnCount = 1 };
+        using MemoryStream stream = WritePartialFile(writer =>
+        {
+            writer.Write((byte)BinaryMeshEntityKind.Vertex);
+            writer.Write(0);
+            writer.Write(2);
+        });
+
+        Assert.Throws<FormatException>(() => new BinaryMeshReader().Read(stream, options));
+    }
+
+    [Fact]
+    public void Read_RejectsColumnIdentifierAboveConfiguredLimit()
+    {
+        var options = new BinaryMeshSerializerOptions { MaximumColumnIdBytes = 0 };
+        using MemoryStream stream = WritePartialFile(writer =>
+        {
+            writer.Write((byte)BinaryMeshEntityKind.Vertex);
+            writer.Write(0);
+            writer.Write(1);
+            writer.Write(1);
+            writer.Write((byte)'x');
+        });
+
+        Assert.Throws<FormatException>(() => new BinaryMeshReader().Read(stream, options));
+    }
+
+    [Fact]
+    public void Read_RejectsColumnPayloadAboveConfiguredLimit()
+    {
+        var options = new BinaryMeshSerializerOptions { MaximumColumnPayloadBytes = 0 };
+        using MemoryStream stream = WritePartialFile(writer =>
+        {
+            writer.Write((byte)BinaryMeshEntityKind.Vertex);
+            writer.Write(0);
+            writer.Write(1);
+            writer.Write(1);
+            writer.Write((byte)'x');
+            writer.Write(1);
+            writer.Write((long)1);
+        });
+
+        Assert.Throws<FormatException>(() => new BinaryMeshReader().Read(stream, options));
+    }
+
+    [Fact]
+    public void Read_RejectsTrailingData()
+    {
+        using var mesh = new HalfEdgeMesh();
+        using MemoryStream stream = new();
+        new BinaryMeshWriter().Write(mesh, stream);
+        stream.WriteByte(1);
+        stream.Position = 0;
+
+        Assert.Throws<FormatException>(() => new BinaryMeshReader().Read(stream));
+    }
+
+    [Fact]
     public void Write_RejectsMissingRequiredColumn()
     {
         using var mesh = new HalfEdgeMesh();
@@ -226,6 +311,19 @@ public sealed class BinaryMeshSerializationTests
                 IndexOf(actualHalfEdges, actualFace.FirstHalfEdge)
             );
         }
+    }
+
+    static MemoryStream WritePartialFile(Action<BinaryWriter> writeBody)
+    {
+        MemoryStream stream = new();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write("TRMB"u8);
+            writer.Write(1);
+            writeBody(writer);
+        }
+        stream.Position = 0;
+        return stream;
     }
 
     static List<Storage.Handle<TTag>> CollectHandles<TTag, TConnectivity>(

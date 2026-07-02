@@ -45,37 +45,53 @@ public sealed class BinaryMeshReader
     )
     {
         var opts = options ?? BinaryMeshSerializerOptions.Default;
+        ValidateLimits(opts);
         var descriptors = BuildDescriptorMap(opts);
 
-        ReadHeader(source);
+        int version = ReadHeader(source);
+        switch (version)
+        {
+            case 1:
+                ReadVersion1(mesh, source, opts, descriptors);
+                break;
+            default:
+                throw new NotSupportedException(
+                    $"Unsupported TRMesh binary mesh version {version}; expected {Version}."
+                );
+        }
 
-        var vertexSection = ReadVertexSection(mesh, source, opts, descriptors);
-        var halfEdgeSection = ReadHalfEdgeSection(mesh, source, opts, descriptors);
-        ReadFacesAndPatchConnectivity(
-            mesh,
-            source,
-            opts,
-            descriptors,
-            vertexSection,
-            halfEdgeSection
-        );
-
+        EnsureAtEnd(source);
         if (opts.ValidateOnRead)
             mesh.ValidateConsistency();
     }
 
-    static void ReadHeader(Stream source)
+    static void ReadVersion1(
+        HalfEdgeMesh mesh,
+        Stream source,
+        BinaryMeshSerializerOptions options,
+        Dictionary<string, BinaryMeshColumnDescriptor> descriptors
+    )
+    {
+        var vertexSection = ReadVertexSection(mesh, source, options, descriptors);
+        var halfEdgeSection = ReadHalfEdgeSection(mesh, source, options, descriptors);
+        ReadFacesAndPatchConnectivity(
+            mesh,
+            source,
+            options,
+            descriptors,
+            vertexSection,
+            halfEdgeSection
+        );
+    }
+
+    static int ReadHeader(Stream source)
     {
         Span<byte> magic = stackalloc byte[4];
         source.ReadExactly(magic);
         if (!magic.SequenceEqual(Magic))
             throw new FormatException("Stream is not a TRMesh binary mesh file.");
 
-        int version = BinaryMeshPrimitives.ReadInt32(source);
-        if (version != Version)
-            throw new NotSupportedException(
-                $"Unsupported TRMesh binary mesh version {version}; expected {Version}."
-            );
+        return BinaryMeshPrimitives.ReadInt32(source);
     }
 
     static VertexSection ReadVertexSection(
@@ -85,7 +101,12 @@ public sealed class BinaryMeshReader
         Dictionary<string, BinaryMeshColumnDescriptor> descriptors
     )
     {
-        int count = ReadSectionHeader(source, BinaryMeshEntityKind.Vertex);
+        int count = ReadSectionHeader(
+            source,
+            BinaryMeshEntityKind.Vertex,
+            options.MaximumEntityCount,
+            sizeof(int)
+        );
         var handles = new VertexHandle[count];
         for (int i = 0; i < count; i++)
             handles[i] = mesh.Vertices.Allocate();
@@ -105,7 +126,12 @@ public sealed class BinaryMeshReader
         Dictionary<string, BinaryMeshColumnDescriptor> descriptors
     )
     {
-        int count = ReadSectionHeader(source, BinaryMeshEntityKind.HalfEdge);
+        int count = ReadSectionHeader(
+            source,
+            BinaryMeshEntityKind.HalfEdge,
+            options.MaximumEntityCount,
+            5 * sizeof(int)
+        );
         var handles = new HalfEdgeHandle[count];
         for (int i = 0; i < count; i++)
             handles[i] = mesh.HalfEdges.Allocate();
@@ -135,7 +161,12 @@ public sealed class BinaryMeshReader
         HalfEdgeSection halfEdgeSection
     )
     {
-        int count = ReadSectionHeader(source, BinaryMeshEntityKind.Face);
+        int count = ReadSectionHeader(
+            source,
+            BinaryMeshEntityKind.Face,
+            options.MaximumEntityCount,
+            sizeof(int)
+        );
         var faceRefs = new FaceHandle[count];
         for (int i = 0; i < count; i++)
             faceRefs[i] = mesh.Faces.Allocate();
@@ -183,7 +214,12 @@ public sealed class BinaryMeshReader
         }
     }
 
-    static int ReadSectionHeader(Stream source, BinaryMeshEntityKind expectedKind)
+    static int ReadSectionHeader(
+        Stream source,
+        BinaryMeshEntityKind expectedKind,
+        int maximumCount,
+        int minimumBytesPerEntity
+    )
     {
         int kind = source.ReadByte();
         if (kind < 0)
@@ -196,6 +232,11 @@ public sealed class BinaryMeshReader
         int count = BinaryMeshPrimitives.ReadInt32(source);
         if (count < 0)
             throw new FormatException($"{expectedKind} live count is negative.");
+        if (count > maximumCount)
+            throw new FormatException(
+                $"{expectedKind} live count {count} exceeds the supported maximum of {maximumCount}."
+            );
+        EnsureRemaining(source, checked((long)count * minimumBytesPerEntity));
         return count;
     }
 
@@ -234,23 +275,34 @@ public sealed class BinaryMeshReader
         int columnCount = BinaryMeshPrimitives.ReadInt32(source);
         if (columnCount < 0)
             throw new FormatException($"{kind} column count is negative.");
+        if (columnCount > options.MaximumColumnCount)
+            throw new FormatException(
+                $"{kind} column count {columnCount} exceeds the supported maximum of "
+                    + $"{options.MaximumColumnCount}."
+            );
 
         var seenColumns = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < columnCount; i++)
         {
-            string columnId = BinaryMeshPrimitives.ReadString(source);
+            string columnId = BinaryMeshPrimitives.ReadString(source, options.MaximumColumnIdBytes);
             if (!seenColumns.Add(columnId))
                 throw new FormatException($"Duplicate column '{columnId}' in {kind} section.");
 
             int elementSize = BinaryMeshPrimitives.ReadInt32(source);
             long payloadBytes = BinaryMeshPrimitives.ReadInt64(source);
-            long expectedBytes = checked((long)elementSize * count);
             if (elementSize <= 0)
                 throw new FormatException($"Column '{columnId}' has invalid element size.");
+            if (payloadBytes < 0 || payloadBytes > options.MaximumColumnPayloadBytes)
+                throw new FormatException(
+                    $"Column '{columnId}' payload length {payloadBytes} is invalid."
+                );
+
+            long expectedBytes = checked((long)elementSize * count);
             if (payloadBytes != expectedBytes)
                 throw new FormatException(
                     $"Column '{columnId}' payload length {payloadBytes} does not match expected {expectedBytes}."
                 );
+            EnsureRemaining(source, payloadBytes);
 
             if (!descriptors.TryGetValue(columnId, out var descriptor))
             {
@@ -302,6 +354,32 @@ public sealed class BinaryMeshReader
                 );
         }
         return descriptors;
+    }
+
+    static void ValidateLimits(BinaryMeshSerializerOptions options)
+    {
+        if (options.MaximumEntityCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(options.MaximumEntityCount));
+        if (options.MaximumColumnCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(options.MaximumColumnCount));
+        if (options.MaximumColumnIdBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(options.MaximumColumnIdBytes));
+        if (options.MaximumColumnPayloadBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(options.MaximumColumnPayloadBytes));
+    }
+
+    static void EnsureRemaining(Stream source, long byteCount)
+    {
+        if (byteCount < 0)
+            throw new FormatException("Binary mesh byte length is negative.");
+        if (source.CanSeek && byteCount > source.Length - source.Position)
+            throw new EndOfStreamException();
+    }
+
+    static void EnsureAtEnd(Stream source)
+    {
+        if (source.CanSeek && source.Position != source.Length)
+            throw new FormatException("Unexpected trailing data after TRMesh binary mesh.");
     }
 
     static void SkipBytes(Stream source, long byteCount)

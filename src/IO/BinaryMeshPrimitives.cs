@@ -56,13 +56,20 @@ static class BinaryMeshPrimitives
         destination.Write(bytes);
     }
 
-    public static string ReadString(Stream source)
+    public static string ReadString(Stream source, int maximumByteCount = int.MaxValue)
     {
         int byteCount = ReadInt32(source);
-        if (byteCount < 0)
-            throw new FormatException("Binary mesh string length is negative.");
+        if (byteCount < 0 || byteCount > maximumByteCount)
+            throw new FormatException($"Binary mesh string length {byteCount} is invalid.");
+        EnsureRemaining(source, byteCount);
         var bytes = new byte[byteCount];
         source.ReadExactly(bytes);
         return Encoding.UTF8.GetString(bytes);
+    }
+
+    private static void EnsureRemaining(Stream source, long byteCount)
+    {
+        if (source.CanSeek && byteCount > source.Length - source.Position)
+            throw new EndOfStreamException();
     }
 }
