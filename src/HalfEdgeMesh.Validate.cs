@@ -19,7 +19,7 @@ public partial class HalfEdgeMesh
     /// Checks performed:
     /// <list type="bullet">
     ///   <item><description>Per half-edge: <see cref="HalfEdge.Twin"/> reciprocity, distinctness from self, live origin/twin/next/prev/face links, twin's origin equals destination, prev/next reciprocity, next-origin matches twin-origin (loop stitching), and consistent face membership across the loop.</description></item>
-    ///   <item><description>Per face: <see cref="Face.FirstHalfEdge"/> is live and points back at the face; the face loop closes within <see cref="LiveCount(TopologyStorage{TTag,TConnectivity})"/> steps.</description></item>
+    ///   <item><description>Per face: <see cref="Face.FirstHalfEdge"/> is live and points back at the face; the face loop closes within <see cref="TopologyStorage{TTag,TConnectivity}.LiveCount"/> steps.</description></item>
     ///   <item><description>Per vertex: <see cref="Vertex.OutgoingHalfEdge"/> is live and originates at the vertex; the vertex ring closes within the half-edge live count.</description></item>
     ///   <item><description>Edge manifoldness (Tier 1): no two live half-edges share the same ordered (origin, destination) pair.</description></item>
     /// </list>

@@ -9,6 +9,18 @@ public partial class SpatialMesh
     /// <paramref name="segments"/> is the number of quads across the span; an arch angle of
     /// zero is flat and 180 degrees produces a semicircle.
     /// </summary>
+    /// <returns>
+    /// All generated faces and newly allocated arc-row vertices. Generated face-corner UVs start
+    /// uninitialized; source UV state is retained as metadata.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The edges do not identify distinct, compatible boundary edges with four distinct
+    /// endpoints and non-degenerate bridge directions.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="segments"/> is less than one, or <paramref name="archAngleDegrees"/> is
+    /// non-finite or outside the inclusive range 0 through 180.
+    /// </exception>
     public BridgeEdgesResult BridgeEdges(
         HalfEdgeHandle firstEdge,
         HalfEdgeHandle secondEdge,
@@ -113,6 +125,10 @@ public partial class SpatialMesh
         );
     }
 
+    /// <summary>
+    /// Returns whether two edges satisfy the boundary, endpoint, connector, and geometric
+    /// preconditions of <see cref="BridgeEdges"/>. This performs no mutation.
+    /// </summary>
     public bool CanBridgeEdges(HalfEdgeHandle firstEdge, HalfEdgeHandle secondEdge) =>
         TryGetBridgePlan(firstEdge, secondEdge, out _);
 
@@ -395,6 +411,10 @@ public partial class SpatialMesh
         HalfEdgeHandle RightConnector
     );
 
+    /// <summary>
+    /// Describes topology created by <see cref="BridgeEdges"/>. Returned handles are live in the
+    /// post-edit mesh; the source edges remain live and become attached to generated faces.
+    /// </summary>
     public readonly record struct BridgeEdgesResult(
         FaceHandle[] Faces,
         VertexHandle[] NewVertices,

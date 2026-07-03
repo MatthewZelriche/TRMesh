@@ -10,6 +10,23 @@ public partial class HalfEdgeMesh
     /// Begin tracking a topology edit around a conservative set of affected vertices.
     /// Dispose the returned scope without committing to restore the initial state.
     /// </summary>
+    /// <param name="affectedVertices">
+    /// Live vertices whose one-ring neighborhoods bound the edit. The set must include every
+    /// region the operation can rewrite so the resulting patch can restore both states exactly.
+    /// </param>
+    /// <returns>
+    /// An exclusive edit scope. Call <see cref="TopologyEditScope.Commit"/> after mutation to
+    /// retain a reversible patch; otherwise disposal rolls the mesh back.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="affectedVertices"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// An affected vertex is not live in this mesh.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Another topology edit is already active on this mesh.
+    /// </exception>
     public TopologyEditScope BeginTopologyEdit(IEnumerable<VertexHandle> affectedVertices)
     {
         if (_activeTopologyEdit is not null)

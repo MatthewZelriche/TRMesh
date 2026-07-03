@@ -11,6 +11,10 @@ public partial class SpatialMesh
     /// <exception cref="ArgumentException">
     /// <paramref name="edge"/> is not a live open edge.
     /// </exception>
+    /// <returns>
+    /// The generated quad, its translated boundary edge, and its two translated vertices.
+    /// Generated face-corner UVs start uninitialized; source UV state is retained as metadata.
+    /// </returns>
     public ExtrudeEdgeResult ExtrudeEdge(HalfEdgeHandle edge, Vector3 offset)
     {
         if (!TryGetEdgeExtrusionPlan(edge, out EdgeExtrusionPlan plan))
@@ -44,6 +48,10 @@ public partial class SpatialMesh
         );
     }
 
+    /// <summary>
+    /// Returns whether <paramref name="edge"/> is live, has a reciprocal twin, and has at least
+    /// one open side. This performs no mutation.
+    /// </summary>
     public bool CanExtrudeEdge(HalfEdgeHandle edge) => TryGetEdgeExtrusionPlan(edge, out _);
 
     private bool TryGetEdgeExtrusionPlan(HalfEdgeHandle edge, out EdgeExtrusionPlan plan)
@@ -88,6 +96,10 @@ public partial class SpatialMesh
         bool SourceHadInitializedUvs
     );
 
+    /// <summary>
+    /// Describes the live post-edit topology created by <see cref="ExtrudeEdge"/>. The original
+    /// edge remains live and becomes the opposite side of the generated quad.
+    /// </summary>
     public readonly record struct ExtrudeEdgeResult(
         FaceHandle Face,
         HalfEdgeHandle OuterEdge,

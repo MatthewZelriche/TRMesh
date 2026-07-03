@@ -9,6 +9,10 @@ public partial class SpatialMesh
     /// replacing it with a side ring and a translated cap.
     /// </summary>
     /// <exception cref="ArgumentException"><paramref name="face"/> is not live.</exception>
+    /// <returns>
+    /// Live handles for the generated cap, side ring, and translated vertices. The source face
+    /// is removed, and generated face-corner UVs start uninitialized.
+    /// </returns>
     public ExtrudeFaceResult ExtrudeFace(FaceHandle face, float distance)
     {
         Vector3 offset = ComputeFaceNormal(face) * distance;
@@ -95,6 +99,10 @@ public partial class SpatialMesh
         VertexHandle[] NewVertices
     );
 
+    /// <summary>
+    /// Describes the complete live replacement topology produced by <see cref="ExtrudeFace"/>.
+    /// The side-face array follows the source face's boundary order.
+    /// </summary>
     public readonly record struct ExtrudeFaceResult(
         FaceHandle CapFace,
         FaceHandle[] SideFaces,

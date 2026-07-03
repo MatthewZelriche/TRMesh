@@ -10,6 +10,18 @@ public partial class SpatialMesh
     /// Replace an interior edge with a chamfer face. Both endpoint vertices must have valence
     /// three, which gives the bevel an unambiguous single-segment termination.
     /// </summary>
+    /// <returns>
+    /// Live post-edit handles plus source-face metadata needed to regenerate UVs. The selected
+    /// edge, its endpoint vertices, and every source face in the result are no longer live.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="edge"/> is not a live interior edge with two distinct incident faces and
+    /// valence-three endpoints.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="width"/> is non-positive, non-finite, or exceeds
+    /// <see cref="TryGetMaximumEdgeBevelWidth"/>.
+    /// </exception>
     public BevelEdgeResult BevelEdge(HalfEdgeHandle edge, float width)
     {
         if (!(width > 0f) || !float.IsFinite(width))
@@ -322,12 +334,21 @@ public partial class SpatialMesh
         HalfEdgeHandle[] IncidentEdges
     );
 
+    /// <summary>
+    /// Maps a removed source face to its live post-edit replacement. Generated face-corner UVs
+    /// start uninitialized; <paramref name="SourceHadInitializedUvs"/> tells callers whether the
+    /// replacement needs UV regeneration.
+    /// </summary>
     public readonly record struct FaceReplacement(
         FaceHandle SourceFace,
         FaceHandle ReplacementFace,
         bool SourceHadInitializedUvs
     );
 
+    /// <summary>
+    /// Describes topology created by <see cref="BevelEdge"/>. Every returned face and vertex
+    /// handle is live in the post-edit mesh; generated UVs are intentionally uninitialized.
+    /// </summary>
     public readonly record struct BevelEdgeResult(
         FaceHandle BevelFace,
         FaceReplacement[] RebuiltFaces,

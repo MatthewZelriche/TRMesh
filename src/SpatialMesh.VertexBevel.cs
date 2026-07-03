@@ -8,6 +8,18 @@ public partial class SpatialMesh
     /// Truncate a closed-manifold vertex by cutting each incident edge and capping the resulting
     /// opening. The vertex may have any valence of at least three.
     /// </summary>
+    /// <returns>
+    /// Live post-edit handles plus source-face metadata needed to regenerate UVs. The supplied
+    /// vertex and every source face in the result are no longer live.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="vertex"/> is not a live closed-manifold vertex with at least three unique
+    /// incident edges and faces.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="width"/> is non-positive, non-finite, or exceeds
+    /// <see cref="TryGetMaximumVertexBevelWidth"/>.
+    /// </exception>
     public BevelVertexResult BevelVertex(VertexHandle vertex, float width)
     {
         if (!(width > 0f) || !float.IsFinite(width))
@@ -225,6 +237,10 @@ public partial class SpatialMesh
         bool BevelFaceHadInitializedUvs
     );
 
+    /// <summary>
+    /// Describes topology created by <see cref="BevelVertex"/>. Every returned face and vertex
+    /// handle is live in the post-edit mesh; generated UVs are intentionally uninitialized.
+    /// </summary>
     public readonly record struct BevelVertexResult(
         FaceHandle BevelFace,
         FaceReplacement[] RebuiltFaces,

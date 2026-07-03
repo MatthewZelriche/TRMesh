@@ -10,6 +10,17 @@ public partial class SpatialMesh
     /// <summary>
     /// Replace a face with an inward-offset cap and a surrounding ring.
     /// </summary>
+    /// <returns>
+    /// Live handles for the generated cap, ring, and inset vertices. The source face is removed,
+    /// and generated face-corner UVs start uninitialized.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="face"/> is not live, is degenerate, or contains invalid corners.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="depth"/> is non-positive, non-finite, or exceeds
+    /// <see cref="ComputeMaximumInsetDepth(FaceHandle)"/>.
+    /// </exception>
     public InsetFaceResult InsetFace(FaceHandle face, float depth)
     {
         if (!(depth > 0f) || !float.IsFinite(depth))
@@ -225,6 +236,10 @@ public partial class SpatialMesh
         return position + bisector * (depth / denominator);
     }
 
+    /// <summary>
+    /// Describes the complete live replacement topology produced by <see cref="InsetFace"/>.
+    /// The ring-face array follows the source face's boundary order.
+    /// </summary>
     public readonly record struct InsetFaceResult(
         FaceHandle CapFace,
         FaceHandle[] RingFaces,

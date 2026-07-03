@@ -79,7 +79,8 @@ public sealed unsafe class NativeColumn<T> : IComponentColumn, IDisposable
     /// This is the zero-copy counterpart to the <see cref="this[int]"/> indexer.
     /// </para>
     /// <para>
-    /// <b>Unsafe lifetime contract (read carefully):</b> the returned <see cref="ref T"/> is valid
+    /// <b>Unsafe lifetime contract (read carefully):</b> the returned <see langword="ref"/>
+    /// <typeparamref name="T"/> is valid
     /// only while this column’s backing storage for slot <paramref name="index"/> remains unmutated.
     /// It becomes invalid immediately if any of the following occur before you are done using the ref.
     /// Never modify the backing storage while a ref exists.

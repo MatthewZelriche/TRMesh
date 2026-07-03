@@ -8,6 +8,8 @@
     <RootNamespace>TREditorSharp</RootNamespace>
     <AssemblyName>TREditorSharp</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Optimize>true</Optimize>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <TieredCompilation>true</TieredCompilation>

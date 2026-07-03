@@ -3,7 +3,7 @@ namespace TREditorSharp;
 /// <summary>
 /// Phantom marker for vertex slots at the type level. Zero-size <c>struct</c>; used only
 /// as a generic type argument (e.g. <c>Handle&lt;VertexTag&gt;</c>,
-/// <see cref="TopologyStorage{TTag, TConnectivity}"/>).
+/// <see cref="Storage.TopologyStorage{TTag,TConnectivity}"/>).
 /// </summary>
 public readonly struct VertexTag { }
 
@@ -15,7 +15,7 @@ public readonly struct FaceTag { }
 
 /// <summary>
 /// Phantom marker for a vertex-position component column (e.g. <c>Vector3</c> positions)
-/// stored in <see cref="TopologyStorage{TTag, TConnectivity}"/>. This tag exists so a mesh
+/// stored in <see cref="Storage.TopologyStorage{TTag,TConnectivity}"/>. This tag exists so a mesh
 /// can have multiple <c>Vector3</c> columns (position, normal, etc.) without ambiguity.
 /// </summary>
 public readonly struct VertexPositionTag { }
