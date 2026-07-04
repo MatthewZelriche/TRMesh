@@ -156,7 +156,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
 
     /// <summary>
     /// <para>
-    /// Zero-copy <see cref="ref"/> into the native column that stores <typeparamref name="T"/>
+    /// Zero-copy <see langword="ref"/> into the native column that stores <typeparamref name="T"/>
     /// under tag <typeparamref name="TColumnTag"/> (see <see cref="GetNativeColumn{T, TColumnTag}"/>).
     /// Prefer the handle indexer or <see cref="GetComponent{T, TColumnTag}"/> when by-value access is acceptable.
     /// </para>
