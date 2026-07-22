@@ -15,6 +15,11 @@ public partial class SpatialMesh
         for (int i = 0; i < vertices.Length; i++)
             positions[i] = GetVertexPosition(vertices[i]);
 
+        return ComputeFaceNormal(positions);
+    }
+
+    public static Vector3 ComputeFaceNormal(ReadOnlySpan<Vector3> positions)
+    {
         Vector3 normal = ComputeNewellNormal(positions);
         float lengthSquared = normal.LengthSquared();
         return lengthSquared > 0f ? normal / MathF.Sqrt(lengthSquared) : Vector3.Zero;
