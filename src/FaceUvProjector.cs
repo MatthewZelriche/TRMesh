@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace TREditorSharp;
 
@@ -126,24 +127,38 @@ public static class FaceUvProjector
         if (corners.Count < 3)
             return false;
 
-        // Newell's method uses the complete polygon loop rather than an arbitrary first triangle.
-        // This gives a stable average normal for n-gons and remains useful when a polygon contains
-        // collinear neighboring corners. The vector is normalized below because UV scale must be
-        // independent of polygon area.
-        Vector3 normal = default;
-        for (int i = 0; i < positions.Count; i++)
-        {
-            Vector3 current = positions[i];
-            Vector3 next = positions[(i + 1) % positions.Count];
-            normal.X += (current.Y - next.Y) * (current.Z + next.Z);
-            normal.Y += (current.Z - next.Z) * (current.X + next.X);
-            normal.Z += (current.X - next.X) * (current.Y + next.Y);
-        }
-
-        float normalLengthSquared = normal.LengthSquared();
-        if (!(normalLengthSquared > DegenerateNormalLengthSquared))
+        var uvs = new Vector2[positions.Count];
+        if (!TryProject(CollectionsMarshal.AsSpan(positions), uvs))
             return false;
-        normal /= MathF.Sqrt(normalLengthSquared);
+
+        var projected = new ProjectedFaceCornerUv[corners.Count];
+        for (int i = 0; i < corners.Count; i++)
+            projected[i] = new ProjectedFaceCornerUv(corners[i], uvs[i]);
+
+        output.AddRange(projected);
+        return true;
+    }
+
+    /// <summary>
+    /// Projects an ordered polygon loop into object-local UV space without mesh access.
+    /// </summary>
+    /// <remarks>
+    /// Returns false for fewer than three positions or a degenerate polygon. On failure,
+    /// <paramref name="output"/> is left unchanged.
+    /// </remarks>
+    public static bool TryProject(ReadOnlySpan<Vector3> positions, Span<Vector2> output)
+    {
+        if (output.Length < positions.Length)
+            throw new ArgumentException(
+                "The output span must fit every projected position.",
+                nameof(output)
+            );
+        if (positions.Length < 3)
+            return false;
+
+        Vector3 normal = SpatialMesh.ComputeFaceNormal(positions);
+        if (!(normal.LengthSquared() > DegenerateNormalLengthSquared))
+            return false;
 
         // The nearest major direction does not become the projection plane. It only chooses the
         // fixed U-axis anchor that establishes a predictable texture orientation. Projecting that
@@ -164,17 +179,15 @@ public static class FaceUvProjector
         // Deliberately use absolute object-local positions rather than subtracting a per-face
         // origin. This makes separate coplanar faces with the same orientation naturally line up.
         // Unit-length U and V axes also make one object-space unit equal one texture repeat.
-        var projected = new ProjectedFaceCornerUv[corners.Count];
-        for (int i = 0; i < corners.Count; i++)
+        for (int i = 0; i < positions.Length; i++)
         {
             Vector3 position = positions[i];
-            projected[i] = new ProjectedFaceCornerUv(
-                corners[i],
-                new Vector2(Vector3.Dot(position, uAxis), Vector3.Dot(position, vAxis))
+            output[i] = new Vector2(
+                Vector3.Dot(position, uAxis),
+                Vector3.Dot(position, vAxis)
             );
         }
 
-        output.AddRange(projected);
         return true;
     }
 
