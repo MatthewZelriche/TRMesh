@@ -11,7 +11,7 @@ public partial class HalfEdgeMesh
     /// Either corner is dead, the corners do not belong to the same live face, the corners are
     /// equal or adjacent, or their vertices are already connected by an edge.
     /// </exception>
-    public (FaceHandle First, FaceHandle Second) SplitFace(
+    public virtual (FaceHandle First, FaceHandle Second) SplitFace(
         FaceCornerHandle cornerA,
         FaceCornerHandle cornerB
     )
