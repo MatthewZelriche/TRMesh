@@ -20,20 +20,16 @@ public partial class HalfEdgeMesh
     /// <list type="bullet">
     ///   <item><description>Per half-edge: <see cref="HalfEdge.Twin"/> reciprocity, distinctness from self, live origin/twin/next/prev/face links, twin's origin equals destination, prev/next reciprocity, next-origin matches twin-origin (loop stitching), and consistent face membership across the loop.</description></item>
     ///   <item><description>Per face: <see cref="Face.FirstHalfEdge"/> is live and points back at the face; the face loop closes within <see cref="TopologyStorage{TTag,TConnectivity}.LiveCount"/> steps.</description></item>
-    ///   <item><description>Per vertex: <see cref="Vertex.OutgoingHalfEdge"/> is live and originates at the vertex; the vertex ring closes within the half-edge live count.</description></item>
+    ///   <item><description>Per vertex: <see cref="Vertex.OutgoingHalfEdge"/> is live and originates at the vertex; the vertex ring closes within the half-edge live count and contains every outgoing half-edge.</description></item>
     ///   <item><description>Edge manifoldness (Tier 1): no two live half-edges share the same ordered (origin, destination) pair.</description></item>
     /// </list>
-    /// </para>
-    /// <para>
-    /// <b>Limitation:</b> non-manifold vertex fans (a "bowtie", where multiple disjoint half-edge
-    /// rings share a single vertex) are not detected. Catching that would require comparing the
-    /// total number of live half-edges with <c>Origin == v</c> against the length of
-    /// <see cref="HalfEdgesAroundVertex"/> for each vertex; this is currently deferred.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The mesh is in an inconsistent state.</exception>
     public void ValidateConsistency()
     {
+        Dictionary<VertexHandle, int> outgoingCounts = [];
+
         // Phase 1: per half-edge structural checks.
         foreach (var h in HalfEdges)
         {
@@ -44,6 +40,8 @@ public partial class HalfEdgeMesh
                 throw new InvalidOperationException(
                     $"ValidateConsistency: half-edge {h} has dead/null Origin {he.Origin}."
                 );
+            outgoingCounts.TryGetValue(he.Origin, out int outgoingCount);
+            outgoingCounts[he.Origin] = outgoingCount + 1;
 
             // Twin must be live and reciprocal.
             if (he.Twin.IsNull || !HalfEdges.IsAlive(he.Twin))
@@ -146,8 +144,15 @@ public partial class HalfEdgeMesh
         {
             ref var vertex = ref Vertices.GetUnsafeRef<Vertex, Vertex>(v);
             var outgoing = vertex.OutgoingHalfEdge;
+            outgoingCounts.TryGetValue(v, out int expectedOutgoingCount);
             if (outgoing.IsNull)
+            {
+                if (expectedOutgoingCount != 0)
+                    throw new InvalidOperationException(
+                        $"ValidateConsistency: vertex {v} has {expectedOutgoingCount} outgoing half-edges but no OutgoingHalfEdge."
+                    );
                 continue;
+            }
 
             if (!HalfEdges.IsAlive(outgoing))
                 throw new InvalidOperationException(
@@ -165,9 +170,11 @@ public partial class HalfEdgeMesh
             // I question the usefulness of this, it succeeding doesn't do a lot to guaruntee
             // validity.
             int budget = HalfEdges.LiveCount + 1;
+            int ringCount = 0;
             var current = outgoing;
             do
             {
+                ringCount++;
                 ref var ch = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(current);
                 ref var prev = ref HalfEdges.GetUnsafeRef<HalfEdge, HalfEdge>(ch.Prev);
                 var nextOutgoing = prev.Twin;
@@ -182,6 +189,11 @@ public partial class HalfEdgeMesh
                         $"ValidateConsistency: vertex {v} ring did not close within {HalfEdges.LiveCount} half-edges."
                     );
             } while (current != outgoing);
+
+            if (ringCount != expectedOutgoingCount)
+                throw new InvalidOperationException(
+                    $"ValidateConsistency: vertex {v} ring contains {ringCount} of its {expectedOutgoingCount} outgoing half-edges; the vertex has disconnected fans."
+                );
         }
 
         // Phase 4 (Tier 1 manifold check): no two live half-edges share an ordered (origin, dest) pair.

@@ -23,8 +23,8 @@ public sealed class SpatialMeshEdgeCollapseTests
         Assert.True(mesh.IsVertexAlive(a));
         Assert.False(mesh.IsVertexAlive(c));
         Assert.Equal(3, CountVertices(mesh));
-        Assert.Equal(2, CountEdges(mesh));
-        Assert.Equal(0, CountFaces(mesh));
+        Assert.Equal(3, CountEdges(mesh));
+        Assert.Equal(1, CountFaces(mesh));
         mesh.ValidateConsistency();
     }
 
@@ -61,6 +61,9 @@ public sealed class SpatialMeshEdgeCollapseTests
             out FaceHandle face
         );
 
+        Assert.True(mesh.IsBoundaryVertex(a));
+        Assert.True(mesh.IsBoundaryVertex(b));
+
         Assert.True(mesh.TryCollapseEdge(FindEdge(mesh, a, b), out VertexHandle survivor));
 
         Assert.Equal(a, survivor);
@@ -68,6 +71,44 @@ public sealed class SpatialMeshEdgeCollapseTests
         Assert.False(mesh.IsFaceAlive(face));
         Assert.True(HasEdge(mesh, a, c));
         Assert.Equal(1, CountEdges(mesh));
+        mesh.ValidateConsistency();
+    }
+
+    [Fact]
+    public void TryCollapseEdge_InteriorDiagonalBetweenBoundaryVerticesReturnsFalseWithoutMutation()
+    {
+        using SpatialMesh mesh = BuildQuad(
+            out VertexHandle a,
+            out _,
+            out VertexHandle c,
+            out _,
+            out FaceHandle sourceFace
+        );
+        List<FaceCornerHandle> corners = [];
+        foreach (FaceCornerHandle corner in mesh.HalfEdgesAroundFace(sourceFace))
+            corners.Add(corner);
+        (FaceHandle first, FaceHandle second) = mesh.SplitFace(corners[0], corners[2]);
+        HalfEdgeHandle diagonal = FindEdge(mesh, a, c);
+        int verticesBefore = CountVertices(mesh);
+        int edgesBefore = CountEdges(mesh);
+        int facesBefore = CountFaces(mesh);
+
+        Assert.True(mesh.IsBoundaryVertex(a));
+        Assert.True(mesh.IsBoundaryVertex(c));
+        Assert.False(mesh.GetHalfEdge(diagonal).Face.IsNull);
+        Assert.False(mesh.GetHalfEdge(mesh.GetHalfEdge(diagonal).Twin).Face.IsNull);
+
+        Assert.False(mesh.TryCollapseEdge(diagonal, out VertexHandle survivor));
+
+        Assert.True(survivor.IsNull);
+        Assert.True(mesh.IsVertexAlive(a));
+        Assert.True(mesh.IsVertexAlive(c));
+        Assert.True(mesh.IsFaceAlive(first));
+        Assert.True(mesh.IsFaceAlive(second));
+        Assert.True(mesh.IsHalfEdgeAlive(diagonal));
+        Assert.Equal(verticesBefore, CountVertices(mesh));
+        Assert.Equal(edgesBefore, CountEdges(mesh));
+        Assert.Equal(facesBefore, CountFaces(mesh));
         mesh.ValidateConsistency();
     }
 
@@ -221,6 +262,7 @@ public sealed class SpatialMeshEdgeCollapseTests
         d = mesh.AddVertex(Vector3.UnitY);
         first = mesh.AddFace([a, c, b]);
         second = mesh.AddFace([a, d, c]);
+        mesh.AddFace([a, b, d]);
         return mesh;
     }
 
@@ -238,8 +280,10 @@ public sealed class SpatialMeshEdgeCollapseTests
         VertexHandle d = mesh.AddVertex(new Vector3(0f, -1f, 0f));
         VertexHandle e = mesh.AddVertex(Vector3.UnitY);
         VertexHandle f = mesh.AddVertex(Vector3.One);
+        VertexHandle g = mesh.AddVertex(new Vector3(-1f, 0f, 0f));
         first = mesh.AddFace([a, b, c, d]);
         second = mesh.AddFace([b, a, e, f]);
+        mesh.AddFace([a, d, g, e]);
         return mesh;
     }
 
@@ -249,12 +293,14 @@ public sealed class SpatialMeshEdgeCollapseTests
         a = mesh.AddVertex(Vector3.Zero);
         b = mesh.AddVertex(Vector3.UnitX);
         VertexHandle c = mesh.AddVertex(Vector3.UnitY);
-        VertexHandle shared = mesh.AddVertex(Vector3.One);
-        VertexHandle x = mesh.AddVertex(Vector3.UnitZ);
-        VertexHandle y = mesh.AddVertex(Vector3.UnitX + Vector3.UnitZ);
+        VertexHandle d = mesh.AddVertex(Vector3.One);
+        VertexHandle shared = mesh.AddVertex(Vector3.UnitZ);
         mesh.AddFace([a, b, c]);
-        mesh.AddFace([a, shared, x]);
-        mesh.AddFace([b, y, shared]);
+        mesh.AddFace([b, a, d]);
+        mesh.AddFace([a, c, shared]);
+        mesh.AddFace([c, b, shared]);
+        mesh.AddFace([b, d, shared]);
+        mesh.AddFace([d, a, shared]);
         return mesh;
     }
 

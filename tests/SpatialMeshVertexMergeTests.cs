@@ -195,12 +195,14 @@ public sealed class SpatialMeshVertexMergeTests
         source = mesh.AddVertex(Vector3.Zero);
         target = mesh.AddVertex(Vector3.UnitX);
         VertexHandle c = mesh.AddVertex(Vector3.UnitY);
-        VertexHandle shared = mesh.AddVertex(Vector3.One);
-        VertexHandle x = mesh.AddVertex(Vector3.UnitZ);
-        VertexHandle y = mesh.AddVertex(Vector3.UnitX + Vector3.UnitZ);
+        VertexHandle d = mesh.AddVertex(Vector3.One);
+        VertexHandle shared = mesh.AddVertex(Vector3.UnitZ);
         mesh.AddFace([source, target, c]);
-        mesh.AddFace([source, shared, x]);
-        mesh.AddFace([target, y, shared]);
+        mesh.AddFace([target, source, d]);
+        mesh.AddFace([source, c, shared]);
+        mesh.AddFace([c, target, shared]);
+        mesh.AddFace([target, d, shared]);
+        mesh.AddFace([d, source, shared]);
         return mesh;
     }
 

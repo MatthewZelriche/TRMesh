@@ -57,6 +57,23 @@ public partial class HalfEdgeMesh : IDisposable
     public bool IsFaceAlive(FaceHandle face) => _faces.IsAlive(face);
 
     /// <summary>
+    /// True when <paramref name="vertex"/> is live and incident to a boundary half-edge.
+    /// </summary>
+    public bool IsBoundaryVertex(VertexHandle vertex)
+    {
+        if (!Vertices.IsAlive(vertex))
+            return false;
+
+        foreach (HalfEdgeHandle halfEdge in HalfEdgesAroundVertex(vertex))
+        {
+            if (HalfEdges[halfEdge].Face.IsNull)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Finds the directed half-edge from <paramref name="origin"/> to
     /// <paramref name="destination"/>, or returns the null handle when the vertices are not
     /// connected in that direction.

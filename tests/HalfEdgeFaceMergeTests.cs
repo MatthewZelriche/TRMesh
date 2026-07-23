@@ -120,6 +120,8 @@ public sealed class HalfEdgeFaceMergeTests
         VertexHandle f = mesh.Vertices.Allocate();
         first = mesh.AddFace([a, b, c, d]);
         second = mesh.AddFace([b, e, d, f, c]);
+        VertexHandle connector = mesh.Vertices.Allocate();
+        mesh.AddFace([d, c, connector, f]);
         return mesh;
     }
 

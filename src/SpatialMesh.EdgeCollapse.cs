@@ -123,6 +123,17 @@ public partial class SpatialMesh
             return false;
         }
 
+        // Collapsing an interior edge with both endpoints as boundaries would produce non-manifold geometry
+        bool isInteriorEdge = !edgeData.Face.IsNull && !twinData.Face.IsNull;
+        if (
+            isInteriorEdge
+            && IsBoundaryVertex(edgeData.Origin)
+            && IsBoundaryVertex(twinData.Origin)
+        )
+        {
+            return false;
+        }
+
         neighborhood = new EdgeCollapseNeighborhood(edge, edgeData, twin, twinData, first, second);
         HashSet<HalfEdgeHandle> removedHalfEdges = CollectRemovedHalfEdges(neighborhood);
         if (!HasExpectedRemovedHalfEdges(neighborhood, removedHalfEdges))

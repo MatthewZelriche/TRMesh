@@ -258,10 +258,7 @@ public sealed class SpatialMeshEdgeMergeTests
     {
         SpatialMesh mesh = BuildQuad(out a, out b, out c, out d, out _);
         VertexHandle shared = mesh.AddVertex(Vector3.UnitZ);
-        VertexHandle x = mesh.AddVertex(new Vector3(0f, 0f, 2f));
-        VertexHandle y = mesh.AddVertex(new Vector3(1f, 0f, 2f));
-        mesh.AddFace([b, shared, x]);
-        mesh.AddFace([c, y, shared]);
+        mesh.AddFace([c, b, shared]);
         return mesh;
     }
 

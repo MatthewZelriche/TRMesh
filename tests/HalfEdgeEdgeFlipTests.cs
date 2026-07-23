@@ -97,7 +97,7 @@ public sealed class HalfEdgeEdgeFlipTests
 
         Assert.True(HasEdge(mesh, a, c));
         Assert.True(HasEdge(mesh, b, d));
-        Assert.Equal(3, CountFaces(mesh));
+        Assert.Equal(4, CountFaces(mesh));
         mesh.ValidateConsistency();
     }
 
@@ -165,8 +165,8 @@ public sealed class HalfEdgeEdgeFlipTests
     )
     {
         HalfEdgeMesh mesh = BuildTwoTriangleQuad(out a, out b, out c, out d, out _, out _);
-        VertexHandle x = mesh.Vertices.Allocate();
-        mesh.AddFace([b, d, x]);
+        mesh.AddFace([b, c, d]);
+        mesh.AddFace([b, d, a]);
         return mesh;
     }
 

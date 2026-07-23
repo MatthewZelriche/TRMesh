@@ -123,7 +123,7 @@ public sealed class HalfEdgeFaceSplitTests
 
         Assert.True(mesh.IsFaceAlive(quad));
         Assert.True(mesh.IsFaceAlive(diagonalFace));
-        Assert.Equal(2, CountFaces(mesh));
+        Assert.Equal(3, CountFaces(mesh));
         mesh.ValidateConsistency();
     }
 
@@ -199,8 +199,9 @@ public sealed class HalfEdgeFaceSplitTests
         VertexHandle c = mesh.Vertices.Allocate();
         VertexHandle d = mesh.Vertices.Allocate();
         VertexHandle x = mesh.Vertices.Allocate();
-        diagonalFace = mesh.AddFace([a, c, x]);
         quad = mesh.AddFace([a, b, c, d]);
+        mesh.AddFace([a, d, c]);
+        diagonalFace = mesh.AddFace([a, c, x]);
         return mesh;
     }
 
