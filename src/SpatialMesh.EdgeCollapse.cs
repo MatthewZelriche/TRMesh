@@ -279,12 +279,9 @@ public partial class SpatialMesh
     private HashSet<VertexHandle> CollectVertexNeighbors(VertexHandle vertex, VertexHandle excluded)
     {
         HashSet<VertexHandle> neighbors = [];
-        foreach (HalfEdgeHandle halfEdge in HalfEdges)
+        foreach (HalfEdgeHandle halfEdge in HalfEdgesAroundVertex(vertex))
         {
             HalfEdge data = HalfEdges[halfEdge];
-            if (data.Origin != vertex || !HalfEdges.IsAlive(data.Twin))
-                continue;
-
             VertexHandle destination = HalfEdges[data.Twin].Origin;
             if (destination != excluded)
                 neighbors.Add(destination);
@@ -299,8 +296,13 @@ public partial class SpatialMesh
         CollapseSide second
     )
     {
-        foreach (FaceHandle face in Faces)
+        HashSet<FaceHandle> incidentFaces = [];
+        foreach (HalfEdgeHandle outgoing in HalfEdgesAroundVertex(removedVertex))
         {
+            FaceHandle face = HalfEdges[outgoing].Face;
+            if (!Faces.IsAlive(face) || !incidentFaces.Add(face))
+                continue;
+
             if (
                 (first.IsTriangle && face == first.EdgeData.Face)
                 || (second.IsTriangle && face == second.EdgeData.Face)
