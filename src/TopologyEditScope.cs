@@ -68,7 +68,7 @@ public sealed class TopologyEditScope
 
         TopologyPatchState before = BuildBeforeState();
         TopologyPatchState after = BuildCurrentState();
-        TopologyPatch patch = new(_mesh, before, after);
+        TopologyPatch patch = new(_mesh, new TopologyDelta(before, after));
         Complete();
         return patch;
     }
@@ -85,7 +85,7 @@ public sealed class TopologyEditScope
 
         TopologyPatchState before = BuildBeforeState();
         TopologyPatchState after = BuildCurrentState();
-        using (TopologyPatch rollback = new(_mesh, before, after))
+        using (TopologyPatch rollback = new(_mesh, new TopologyDelta(before, after)))
             rollback.ApplyBefore();
         Complete();
     }
@@ -173,7 +173,10 @@ public sealed class TopologyEditScope
         ReleaseCreatedAndRemoved(_mesh.Faces, _allocatedFaces, _beforeFaces);
 
         TopologyPatchState currentFullState = _mesh.CaptureFullTopologyPatchState();
-        using TopologyPatch rollback = new(_mesh, _debugInitialFullState, currentFullState);
+        using TopologyPatch rollback = new(
+            _mesh,
+            new TopologyDelta(_debugInitialFullState, currentFullState)
+        );
         rollback.ApplyBefore();
     }
 

@@ -9,42 +9,42 @@ using TREditorSharp.Storage;
 public sealed class TopologyPatch : IDisposable
 {
     private readonly HalfEdgeMesh _mesh;
-    private readonly TopologyPatchState _before;
-    private readonly TopologyPatchState _after;
+    private readonly TopologyDelta _delta;
     private PatchSide _currentSide = PatchSide.After;
     private bool _disposed;
 
+    /// <summary>Detached before/after data and affected handles owned by this patch.</summary>
+    public TopologyDelta Delta => _delta;
+
     /// <summary>
     /// Creates a patch after its edit has completed. The mesh must currently match
-    /// <paramref name="after"/>, and entities present only in <paramref name="before"/> must
+    /// the delta's after state, and entities present only in its before state must
     /// remain reserved for the patch.
     /// </summary>
-    internal TopologyPatch(HalfEdgeMesh mesh, TopologyPatchState before, TopologyPatchState after)
+    internal TopologyPatch(HalfEdgeMesh mesh, TopologyDelta delta)
     {
         ArgumentNullException.ThrowIfNull(mesh);
-        ArgumentNullException.ThrowIfNull(before);
-        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(delta);
 
         _mesh = mesh;
-        _before = before;
-        _after = after;
+        _delta = delta;
 
         ValidateSchemas();
-        ValidateCurrentState(_after, _before);
+        ValidateCurrentState(_delta.After, _delta.Before);
     }
 
-    public void ApplyBefore() => Apply(_before, PatchSide.Before);
+    public void ApplyBefore() => Apply(_delta.Before, PatchSide.Before);
 
-    public void ApplyAfter() => Apply(_after, PatchSide.After);
+    public void ApplyAfter() => Apply(_delta.After, PatchSide.After);
 
     public void Dispose()
     {
         if (_disposed)
             return;
 
-        ReleaseReserved(_mesh.Vertices, _before.Vertices, _after.Vertices);
-        ReleaseReserved(_mesh.HalfEdges, _before.HalfEdges, _after.HalfEdges);
-        ReleaseReserved(_mesh.Faces, _before.Faces, _after.Faces);
+        ReleaseReserved(_mesh.Vertices, _delta.Before.Vertices, _delta.After.Vertices);
+        ReleaseReserved(_mesh.HalfEdges, _delta.Before.HalfEdges, _delta.After.HalfEdges);
+        ReleaseReserved(_mesh.Faces, _delta.Before.Faces, _delta.After.Faces);
         _disposed = true;
     }
 
@@ -53,8 +53,10 @@ public sealed class TopologyPatch : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ValidateSchemas();
 
-        TopologyPatchState source = _currentSide == PatchSide.Before ? _before : _after;
-        TopologyPatchState sourceOther = _currentSide == PatchSide.Before ? _after : _before;
+        TopologyPatchState source =
+            _currentSide == PatchSide.Before ? _delta.Before : _delta.After;
+        TopologyPatchState sourceOther =
+            _currentSide == PatchSide.Before ? _delta.After : _delta.Before;
         ValidateCurrentState(source, sourceOther);
 
         if (_currentSide == targetSide)
@@ -80,12 +82,12 @@ public sealed class TopologyPatch : IDisposable
 
     private void ValidateSchemas()
     {
-        ValidateSchemas(_mesh.Vertices, _before.Vertices);
-        ValidateSchemas(_mesh.Vertices, _after.Vertices);
-        ValidateSchemas(_mesh.HalfEdges, _before.HalfEdges);
-        ValidateSchemas(_mesh.HalfEdges, _after.HalfEdges);
-        ValidateSchemas(_mesh.Faces, _before.Faces);
-        ValidateSchemas(_mesh.Faces, _after.Faces);
+        ValidateSchemas(_mesh.Vertices, _delta.Before.Vertices);
+        ValidateSchemas(_mesh.Vertices, _delta.After.Vertices);
+        ValidateSchemas(_mesh.HalfEdges, _delta.Before.HalfEdges);
+        ValidateSchemas(_mesh.HalfEdges, _delta.After.HalfEdges);
+        ValidateSchemas(_mesh.Faces, _delta.Before.Faces);
+        ValidateSchemas(_mesh.Faces, _delta.After.Faces);
     }
 
     private void ValidateCurrentState(TopologyPatchState expected, TopologyPatchState other)

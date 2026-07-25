@@ -21,7 +21,7 @@ public sealed class TopologyPatchTests
         mesh.SetVertexPosition(vertex, new Vector3(4, 5, 6));
         weights[mesh.Vertices.GetDenseIndex(vertex)] = 20;
         TopologyPatchState after = mesh.CaptureTopologyPatchState([vertex]);
-        using TopologyPatch patch = new(mesh, before, after);
+        using TopologyPatch patch = new(mesh, new TopologyDelta(before, after));
 
         patch.ApplyBefore();
 
@@ -45,7 +45,7 @@ public sealed class TopologyPatchTests
         TopologyPatchState before = mesh.CaptureTopologyPatchState([a, b, c]);
         ReserveState(mesh, before);
         TopologyPatchState after = EmptyState();
-        using TopologyPatch patch = new(mesh, before, after);
+        using TopologyPatch patch = new(mesh, new TopologyDelta(before, after));
 
         patch.ApplyBefore();
 
@@ -84,7 +84,7 @@ public sealed class TopologyPatchTests
         VertexHandle created = mesh.Vertices.Allocate();
         TopologyPatchState before = EmptyState();
         TopologyPatchState after = mesh.CaptureTopologyPatchState([created]);
-        using TopologyPatch patch = new(mesh, before, after);
+        using TopologyPatch patch = new(mesh, new TopologyDelta(before, after));
 
         for (int i = 0; i < 3; i++)
         {
@@ -106,7 +106,7 @@ public sealed class TopologyPatchTests
         TopologyPatchState before = mesh.CaptureTopologyPatchState([vertex]);
         mesh.SetVertexPosition(vertex, new Vector3(4, 5, 6));
         TopologyPatchState after = mesh.CaptureTopologyPatchState([vertex]);
-        using TopologyPatch patch = new(mesh, before, after);
+        using TopologyPatch patch = new(mesh, new TopologyDelta(before, after));
         Vector3 unexpected = new(7, 8, 9);
         mesh.SetVertexPosition(vertex, unexpected);
 
@@ -122,7 +122,7 @@ public sealed class TopologyPatchTests
         using HalfEdgeMesh mesh = new();
         VertexHandle vertex = mesh.Vertices.Allocate();
         TopologyPatchState state = mesh.CaptureTopologyPatchState([vertex]);
-        using TopologyPatch patch = new(mesh, state, state);
+        using TopologyPatch patch = new(mesh, new TopologyDelta(state, state));
         mesh.Vertices.RegisterNativeColumn<int, AddedLaterTag>();
 
         Assert.Throws<InvalidOperationException>(patch.ApplyBefore);
@@ -138,7 +138,7 @@ public sealed class TopologyPatchTests
         TopologyPatchState before = mesh.CaptureTopologyPatchState([removed]);
         mesh.Vertices.CaptureAndReserve(removed);
         TopologyPatchState after = EmptyState();
-        TopologyPatch patch = new(mesh, before, after);
+        TopologyPatch patch = new(mesh, new TopologyDelta(before, after));
 
         patch.Dispose();
         patch.Dispose();
@@ -157,7 +157,7 @@ public sealed class TopologyPatchTests
         VertexHandle created = mesh.Vertices.Allocate();
         TopologyPatchState before = EmptyState();
         TopologyPatchState after = mesh.CaptureTopologyPatchState([created]);
-        TopologyPatch patch = new(mesh, before, after);
+        TopologyPatch patch = new(mesh, new TopologyDelta(before, after));
         patch.ApplyBefore();
 
         patch.Dispose();

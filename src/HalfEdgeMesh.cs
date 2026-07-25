@@ -33,6 +33,13 @@ public partial class HalfEdgeMesh : IDisposable
     /// <summary>Face topology storage. See <see cref="Vertices"/>.</summary>
     internal TopologyStorage<FaceTag, Face> Faces => _faces;
 
+    /// <summary>
+    /// Changing token for supported topology and component mutations. Consumers should compare
+    /// for equality rather than assuming consecutive or ordered values.
+    /// </summary>
+    public MeshRevision Revision =>
+        new(_vertices.Revision, _halfEdges.Revision, _faces.Revision);
+
     /// <summary>Stack-only iteration of live <see cref="FaceHandle"/> values in unspecified order.</summary>
     public TopologyStorage<FaceTag, Face>.LiveHandleEnumerable EnumerateLiveFaces() => _faces.Live;
 

@@ -31,6 +31,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     private readonly Dictionary<Type, IComponentColumn> _columnsByTag = [];
     private ComponentColumnSchema[] _columnSchema = [];
     private ITopologyStorageEditTracker<TTag>? _editTracker;
+    private ulong _revision;
     private bool _disposed;
 
     public TopologyStorage()
@@ -42,6 +43,8 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         AddColumnSchema(typeof(TConnectivity), _connectivity);
         _pool.RegisterColumn(_connectivity);
     }
+
+    internal ulong Revision => _revision;
 
     /// <summary>Number of currently live entities.</summary>
     public int LiveCount
@@ -55,6 +58,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     public Handle<TTag> Allocate()
     {
         Handle<TTag> handle = _pool.Allocate();
+        MarkMutated();
         _editTracker?.OnAllocated(handle);
         return handle;
     }
@@ -66,10 +70,12 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         if (_editTracker is null)
         {
             _pool.Free(handle);
+            MarkMutated();
             return;
         }
 
         EntitySnapshot<TTag> snapshot = _pool.CaptureAndReserve(handle, _columnSchema);
+        MarkMutated();
         _editTracker.OnReserved(snapshot);
     }
 
@@ -92,8 +98,12 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         _editTracker = null;
     }
 
-    internal EntitySnapshot<TTag> CaptureAndReserve(Handle<TTag> handle) =>
-        _pool.CaptureAndReserve(handle, _columnSchema);
+    internal EntitySnapshot<TTag> CaptureAndReserve(Handle<TTag> handle)
+    {
+        EntitySnapshot<TTag> snapshot = _pool.CaptureAndReserve(handle, _columnSchema);
+        MarkMutated();
+        return snapshot;
+    }
 
     internal EntitySnapshot<TTag> Capture(Handle<TTag> handle) =>
         _pool.Capture(handle, _columnSchema);
@@ -103,6 +113,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         ArgumentNullException.ThrowIfNull(snapshot);
         ValidateSchema(snapshot.ColumnSchema);
         _pool.RestoreReserved(snapshot);
+        MarkMutated();
     }
 
     internal void RestoreEntries(EntitySnapshot<TTag> snapshot)
@@ -110,6 +121,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         ArgumentNullException.ThrowIfNull(snapshot);
         ValidateSchema(snapshot.ColumnSchema);
         _pool.RestoreEntries(snapshot);
+        MarkMutated();
     }
 
     internal void ValidateSnapshotSchema(EntitySnapshot<TTag> snapshot)
@@ -118,7 +130,11 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         ValidateSchema(snapshot.ColumnSchema);
     }
 
-    internal void ReleaseReserved(Handle<TTag> handle) => _pool.ReleaseReserved(handle);
+    internal void ReleaseReserved(Handle<TTag> handle)
+    {
+        _pool.ReleaseReserved(handle);
+        MarkMutated();
+    }
 
     internal bool IsReserved(Handle<TTag> handle) => _pool.IsReserved(handle);
 
@@ -151,6 +167,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         {
             _pool.ValidateLive(handle);
             _connectivity[_pool.GetDenseIndex(handle)] = value;
+            MarkMutated();
         }
     }
 
@@ -222,6 +239,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     {
         _pool.ValidateLive(handle);
         GetNativeColumn<T, TColumnTag>()[_pool.GetDenseIndex(handle)] = value;
+        MarkMutated();
     }
 
     /// <summary>
@@ -254,6 +272,7 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         _columnsByTag[typeof(TColumnTag)] = col;
         AddColumnSchema(typeof(TColumnTag), col);
         _pool.RegisterColumn(col);
+        MarkMutated();
         return col;
     }
 
@@ -291,7 +310,11 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     public bool HasColumnTag<TColumnTag>() => _columnsByTag.ContainsKey(typeof(TColumnTag));
 
     /// <summary>Reset the storage to empty without releasing buffers.</summary>
-    public void Clear() => _pool.Clear();
+    public void Clear()
+    {
+        _pool.Clear();
+        MarkMutated();
+    }
 
     internal Span<TConnectivity> ConnectivitySpan => _connectivity.AsSpan();
 
@@ -334,6 +357,9 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         );
         _columnSchema = updated;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void MarkMutated() => _revision = unchecked(_revision + 1);
 
     private void ValidateSchema(IReadOnlyList<ComponentColumnSchema> schema)
     {

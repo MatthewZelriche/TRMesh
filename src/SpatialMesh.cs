@@ -32,17 +32,17 @@ public partial class SpatialMesh : HalfEdgeMesh
     public VertexHandle AddVertex(Vector3 position)
     {
         var v = Vertices.Allocate();
-        VertexPositions[Vertices.GetDenseIndex(v)] = position;
+        Vertices.SetComponent<Vector3, VertexPositionTag>(v, position);
         return v;
     }
 
     /// <summary>World-space position for a live vertex.</summary>
     public Vector3 GetVertexPosition(VertexHandle vertex) =>
-        VertexPositions[Vertices.GetDenseIndex(vertex)];
+        Vertices.GetComponent<Vector3, VertexPositionTag>(vertex);
 
     /// <summary>Set the position for a live vertex.</summary>
     public void SetVertexPosition(VertexHandle vertex, Vector3 position) =>
-        VertexPositions[Vertices.GetDenseIndex(vertex)] = position;
+        Vertices.SetComponent<Vector3, VertexPositionTag>(vertex, position);
 
     /// <summary>Position by dense vertex index.</summary>
     public Vector3 GetVertexPositionByDenseIndex(int denseIndex) => VertexPositions[denseIndex];
@@ -51,14 +51,14 @@ public partial class SpatialMesh : HalfEdgeMesh
     public Vector2 GetFaceCornerUv(FaceCornerHandle corner)
     {
         ValidateFaceCorner(corner);
-        return FaceCornerUvs[HalfEdges.GetDenseIndex(corner)];
+        return HalfEdges.GetComponent<Vector2, FaceCornerUvTag>(corner);
     }
 
     /// <summary>Set the UV coordinate belonging to one polygon face corner.</summary>
     public void SetFaceCornerUv(FaceCornerHandle corner, Vector2 uv)
     {
         ValidateFaceCorner(corner);
-        FaceCornerUvs[HalfEdges.GetDenseIndex(corner)] = uv;
+        HalfEdges.SetComponent<Vector2, FaceCornerUvTag>(corner, uv);
     }
 
     /// <summary>
@@ -66,30 +66,31 @@ public partial class SpatialMesh : HalfEdgeMesh
     /// represents an untextured face.
     /// </summary>
     public int GetFaceMaterialSlot(FaceHandle face) =>
-        (int)(FaceTextureStates[Faces.GetDenseIndex(face)] & MaterialSlotMask);
+        (int)(Faces.GetComponent<uint, FaceTextureStateTag>(face) & MaterialSlotMask);
 
     /// <summary>Assign a non-negative material slot to a polygon face.</summary>
     public void SetFaceMaterialSlot(FaceHandle face, int materialSlot)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(materialSlot);
-        int denseIndex = Faces.GetDenseIndex(face);
-        uint state = FaceTextureStates[denseIndex];
-        FaceTextureStates[denseIndex] =
-            (state & UvsInitializedMask) | ((uint)materialSlot & MaterialSlotMask);
+        uint state = Faces.GetComponent<uint, FaceTextureStateTag>(face);
+        Faces.SetComponent<uint, FaceTextureStateTag>(
+            face,
+            (state & UvsInitializedMask) | ((uint)materialSlot & MaterialSlotMask)
+        );
     }
 
     /// <summary>Whether a polygon face has explicitly initialized corner UVs.</summary>
     public bool AreFaceUvsInitialized(FaceHandle face) =>
-        (FaceTextureStates[Faces.GetDenseIndex(face)] & UvsInitializedMask) != 0;
+        (Faces.GetComponent<uint, FaceTextureStateTag>(face) & UvsInitializedMask) != 0;
 
     /// <summary>Set whether a polygon face has explicitly initialized corner UVs.</summary>
     public void SetFaceUvsInitialized(FaceHandle face, bool initialized)
     {
-        int denseIndex = Faces.GetDenseIndex(face);
-        uint state = FaceTextureStates[denseIndex];
-        FaceTextureStates[denseIndex] = initialized
-            ? state | UvsInitializedMask
-            : state & ~UvsInitializedMask;
+        uint state = Faces.GetComponent<uint, FaceTextureStateTag>(face);
+        Faces.SetComponent<uint, FaceTextureStateTag>(
+            face,
+            initialized ? state | UvsInitializedMask : state & ~UvsInitializedMask
+        );
     }
 
     /// <summary>
