@@ -108,6 +108,18 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     internal EntitySnapshot<TTag> Capture(Handle<TTag> handle) =>
         _pool.Capture(handle, _columnSchema);
 
+    internal EntitySnapshot<TTag>[] CaptureIncluded(HashSet<Handle<TTag>> included)
+    {
+        ArgumentNullException.ThrowIfNull(included);
+        List<EntitySnapshot<TTag>> snapshots = [];
+        foreach (Handle<TTag> handle in this)
+        {
+            if (included.Contains(handle))
+                snapshots.Add(Capture(handle));
+        }
+        return snapshots.ToArray();
+    }
+
     internal void RestoreReserved(EntitySnapshot<TTag> snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -128,6 +140,13 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ValidateSchema(snapshot.ColumnSchema);
+    }
+
+    internal void ValidateSnapshotSchemas(IReadOnlyList<EntitySnapshot<TTag>> snapshots)
+    {
+        ArgumentNullException.ThrowIfNull(snapshots);
+        for (int i = 0; i < snapshots.Count; i++)
+            ValidateSnapshotSchema(snapshots[i]);
     }
 
     internal void ReleaseReserved(Handle<TTag> handle)
