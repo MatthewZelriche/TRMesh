@@ -7,7 +7,7 @@ using TREditorSharp.Storage;
 /// <summary>
 /// HalfEdgeMesh that represents a 3D mesh that can be converted and displayed as a polygon mesh.
 /// </summary>
-public partial class SpatialMesh : HalfEdgeMesh
+public partial class SpatialMesh : HalfEdgeMesh, ISpatialMeshView
 {
     public const int UntexturedMaterialSlot = 0;
 

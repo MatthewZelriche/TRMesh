@@ -8,7 +8,7 @@ using TREditorSharp.Storage;
 /// <see cref="SpatialMesh"/> that remains in the delta's before state.
 /// Unaffected entities read through to the base mesh; affected entities read from the delta.
 /// </summary>
-public sealed class SpatialMeshFork
+public sealed class SpatialMeshFork : ISpatialMeshView
 {
     private readonly SpatialMesh _baseMesh;
     private readonly MeshRevision _baseRevision;
