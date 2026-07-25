@@ -203,13 +203,6 @@ internal sealed class SlotPool<TTag>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public LiveEnumerator GetEnumerator() => new(_set.GetEnumerator());
 
-    /// <summary>foreach-friendly wrapper around <see cref="GetEnumerator"/>.</summary>
-    public LiveEnumerable Live
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => new(_set);
-    }
-
     private void EnsureComponentDataMatchesColumns(EntitySnapshot<TTag> snapshot)
     {
         int expectedBytes = 0;
@@ -231,22 +224,6 @@ internal sealed class SlotPool<TTag>
         throw new InvalidOperationException(
             $"Handle (Index={handle.Index}, Generation={handle.Generation}) does not refer to a live slot."
         );
-    }
-
-    /// <summary>
-    /// Lightweight foreach-target wrapping a <see cref="SparseSet{TTag}.LiveEnumerator"/>.
-    /// </summary>
-    public readonly ref struct LiveEnumerable
-    {
-        private readonly SparseSet<TTag> _set;
-
-        internal LiveEnumerable(SparseSet<TTag> set)
-        {
-            _set = set;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public LiveEnumerator GetEnumerator() => new(_set.GetEnumerator());
     }
 
     /// <summary>

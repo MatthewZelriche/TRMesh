@@ -209,8 +209,6 @@ public partial class SpatialMesh
         }
 
         neighborhood = new BevelNeighborhood(
-            edge,
-            first.Twin,
             first.Face,
             second.Face,
             origin,
@@ -316,8 +314,6 @@ public partial class SpatialMesh
     );
 
     private readonly record struct BevelNeighborhood(
-        HalfEdgeHandle Edge,
-        HalfEdgeHandle Twin,
         FaceHandle FirstFace,
         FaceHandle SecondFace,
         VertexHandle Origin,

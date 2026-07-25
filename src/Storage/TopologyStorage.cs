@@ -335,8 +335,6 @@ public class TopologyStorage<TTag, TConnectivity> : IDisposable
         MarkMutated();
     }
 
-    internal Span<TConnectivity> ConnectivitySpan => _connectivity.AsSpan();
-
     internal IReadOnlyList<ComponentColumnSchema> ColumnSchema => _columnSchema;
 
     /// <summary>Iterate live entity handles in unspecified order. Stack-allocated; never allocates.</summary>
