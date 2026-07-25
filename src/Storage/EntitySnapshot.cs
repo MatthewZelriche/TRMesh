@@ -1,5 +1,7 @@
 namespace TREditorSharp.Storage;
 
+using System.Runtime.InteropServices;
+
 /// <summary>
 /// Complete component state for one reserved topology entity. Component bytes are packed in
 /// column registration order and interpreted using <see cref="ColumnSchema"/>.
@@ -26,5 +28,50 @@ internal sealed class EntitySnapshot<TTag>
         Handle = handle;
         _columnSchema = columnSchema;
         _componentData = componentData;
+    }
+
+    public T GetComponent<T, TColumnTag>()
+        where T : unmanaged
+    {
+        int offset = 0;
+        for (int i = 0; i < _columnSchema.Length; i++)
+        {
+            ComponentColumnSchema column = _columnSchema[i];
+            if (column.TagType == typeof(TColumnTag))
+            {
+                if (column.ElementType != typeof(T))
+                {
+                    throw new InvalidOperationException(
+                        $"Column tagged {typeof(TColumnTag)} stores {column.ElementType}, "
+                            + $"not {typeof(T)}."
+                    );
+                }
+
+                return MemoryMarshal.Read<T>(
+                    _componentData.AsSpan(offset, column.ElementSize)
+                );
+            }
+
+            offset += column.ElementSize;
+        }
+
+        throw new KeyNotFoundException(
+            $"No component column tagged {typeof(TColumnTag)} exists in the snapshot."
+        );
+    }
+
+    public bool StateEquals(EntitySnapshot<TTag> other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (Handle != other.Handle || _columnSchema.Length != other._columnSchema.Length)
+            return false;
+
+        for (int i = 0; i < _columnSchema.Length; i++)
+        {
+            if (_columnSchema[i] != other._columnSchema[i])
+                return false;
+        }
+
+        return _componentData.AsSpan().SequenceEqual(other._componentData);
     }
 }

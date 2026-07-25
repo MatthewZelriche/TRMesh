@@ -229,19 +229,7 @@ public sealed class TopologyPatch : IDisposable
     }
 
     private static bool SnapshotsEqual<TTag>(EntitySnapshot<TTag> left, EntitySnapshot<TTag> right)
-        where TTag : unmanaged
-    {
-        if (left.Handle != right.Handle || left.ColumnSchema.Count != right.ColumnSchema.Count)
-            return false;
-
-        for (int i = 0; i < left.ColumnSchema.Count; i++)
-        {
-            if (left.ColumnSchema[i] != right.ColumnSchema[i])
-                return false;
-        }
-
-        return left.ComponentData.Span.SequenceEqual(right.ComponentData.Span);
-    }
+        where TTag : unmanaged => left.StateEquals(right);
 
     private static void ThrowStateMismatch<TTag>(Handle<TTag> handle)
         where TTag : unmanaged =>

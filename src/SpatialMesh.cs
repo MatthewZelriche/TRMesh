@@ -11,8 +11,8 @@ public partial class SpatialMesh : HalfEdgeMesh
 {
     public const int UntexturedMaterialSlot = 0;
 
-    private const uint UvsInitializedMask = 1u << 31;
-    private const uint MaterialSlotMask = ~UvsInitializedMask;
+    internal const uint UvsInitializedMask = 1u << 31;
+    internal const uint MaterialSlotMask = ~UvsInitializedMask;
 
     private NativeColumn<Vector3> VertexPositions { get; }
     private NativeColumn<Vector2> FaceCornerUvs { get; }
@@ -179,6 +179,28 @@ public partial class SpatialMesh : HalfEdgeMesh
             Vector3* posPtr = VertexPositions.DataPtr;
             for (int i = 0; i < count; i++)
                 positions[i] = posPtr[denseIdx[i]];
+        }
+
+        return TriangulateFaceCorners(corners, positions, output);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool TriangulateFaceCorners(
+        ReadOnlySpan<FaceCornerHandle> corners,
+        ReadOnlySpan<Vector3> positions,
+        List<FaceCornerHandle> output
+    )
+    {
+        if (corners.Length != positions.Length || corners.Length < 3)
+            return false;
+
+        int count = corners.Length;
+        if (count == 3)
+        {
+            output.Add(corners[0]);
+            output.Add(corners[1]);
+            output.Add(corners[2]);
+            return true;
         }
 
         // Phase C: Newell's method for a robust face normal. Direction-only; we never

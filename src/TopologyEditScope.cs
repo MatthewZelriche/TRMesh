@@ -204,9 +204,7 @@ public sealed class TopologyEditScope
     }
 
     private static bool SnapshotsEqual<TTag>(EntitySnapshot<TTag> left, EntitySnapshot<TTag> right)
-        where TTag : unmanaged =>
-        left.Handle == right.Handle
-        && left.ComponentData.Span.SequenceEqual(right.ComponentData.Span);
+        where TTag : unmanaged => left.StateEquals(right);
 
     private static void ThrowUnderCaptured<TTag>(Handle<TTag> handle)
         where TTag : unmanaged =>
