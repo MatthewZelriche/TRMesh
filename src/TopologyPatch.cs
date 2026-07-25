@@ -82,12 +82,12 @@ public sealed class TopologyPatch : IDisposable
 
     private void ValidateSchemas()
     {
-        ValidateSchemas(_mesh.Vertices, _delta.Before.Vertices);
-        ValidateSchemas(_mesh.Vertices, _delta.After.Vertices);
-        ValidateSchemas(_mesh.HalfEdges, _delta.Before.HalfEdges);
-        ValidateSchemas(_mesh.HalfEdges, _delta.After.HalfEdges);
-        ValidateSchemas(_mesh.Faces, _delta.Before.Faces);
-        ValidateSchemas(_mesh.Faces, _delta.After.Faces);
+        _mesh.Vertices.ValidateSnapshotSchemas(_delta.Before.Vertices);
+        _mesh.Vertices.ValidateSnapshotSchemas(_delta.After.Vertices);
+        _mesh.HalfEdges.ValidateSnapshotSchemas(_delta.Before.HalfEdges);
+        _mesh.HalfEdges.ValidateSnapshotSchemas(_delta.After.HalfEdges);
+        _mesh.Faces.ValidateSnapshotSchemas(_delta.Before.Faces);
+        _mesh.Faces.ValidateSnapshotSchemas(_delta.After.Faces);
     }
 
     private void ValidateCurrentState(TopologyPatchState expected, TopologyPatchState other)
@@ -95,17 +95,6 @@ public sealed class TopologyPatch : IDisposable
         ValidateCurrentState(_mesh.Vertices, expected.Vertices, other.Vertices);
         ValidateCurrentState(_mesh.HalfEdges, expected.HalfEdges, other.HalfEdges);
         ValidateCurrentState(_mesh.Faces, expected.Faces, other.Faces);
-    }
-
-    private static void ValidateSchemas<TTag, TConnectivity>(
-        TopologyStorage<TTag, TConnectivity> storage,
-        IReadOnlyList<EntitySnapshot<TTag>> snapshots
-    )
-        where TTag : unmanaged
-        where TConnectivity : unmanaged
-    {
-        for (int i = 0; i < snapshots.Count; i++)
-            storage.ValidateSnapshotSchema(snapshots[i]);
     }
 
     private static void ValidateCurrentState<TTag, TConnectivity>(
@@ -116,7 +105,8 @@ public sealed class TopologyPatch : IDisposable
         where TTag : unmanaged
         where TConnectivity : unmanaged
     {
-        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> expectedByHandle = Index(expected);
+        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> expectedByHandle =
+            EntitySnapshot<TTag>.IndexByHandle(expected);
 
         for (int i = 0; i < expected.Count; i++)
         {
@@ -152,7 +142,8 @@ public sealed class TopologyPatch : IDisposable
         where TTag : unmanaged
         where TConnectivity : unmanaged
     {
-        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> targetByHandle = Index(target);
+        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> targetByHandle =
+            EntitySnapshot<TTag>.IndexByHandle(target);
         for (int i = 0; i < source.Count; i++)
         {
             if (!targetByHandle.ContainsKey(source[i].Handle))
@@ -168,7 +159,8 @@ public sealed class TopologyPatch : IDisposable
         where TTag : unmanaged
         where TConnectivity : unmanaged
     {
-        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> sourceByHandle = Index(source);
+        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> sourceByHandle =
+            EntitySnapshot<TTag>.IndexByHandle(source);
         for (int i = 0; i < target.Count; i++)
         {
             EntitySnapshot<TTag> snapshot = target[i];
@@ -209,23 +201,6 @@ public sealed class TopologyPatch : IDisposable
                     storage.ReleaseReserved(handle);
             }
         }
-    }
-
-    private static Dictionary<Handle<TTag>, EntitySnapshot<TTag>> Index<TTag>(
-        IReadOnlyList<EntitySnapshot<TTag>> snapshots
-    )
-        where TTag : unmanaged
-    {
-        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> result = new(snapshots.Count);
-        for (int i = 0; i < snapshots.Count; i++)
-        {
-            EntitySnapshot<TTag> snapshot = snapshots[i];
-            if (!result.TryAdd(snapshot.Handle, snapshot))
-                throw new ArgumentException(
-                    $"Topology patch contains duplicate handle {snapshot.Handle}."
-                );
-        }
-        return result;
     }
 
     private static bool SnapshotsEqual<TTag>(EntitySnapshot<TTag> left, EntitySnapshot<TTag> right)

@@ -47,7 +47,11 @@ public partial class SpatialMesh
         return vertices.ToArray();
     }
 
-    private static Vector3 ComputeNewellNormal(ReadOnlySpan<Vector3> positions)
+    /// <summary>
+    /// Unnormalized Newell polygon normal. Callers that need a unit normal should use
+    /// <see cref="ComputeFaceNormal(ReadOnlySpan{Vector3})"/>.
+    /// </summary>
+    public static Vector3 ComputeNewellNormal(ReadOnlySpan<Vector3> positions)
     {
         Vector3 normal = Vector3.Zero;
         for (int i = 0; i < positions.Length; i++)

@@ -28,9 +28,9 @@ public sealed class TopologyEditScope
     internal TopologyEditScope(HalfEdgeMesh mesh, TopologyPatchState before)
     {
         _mesh = mesh;
-        _beforeVertices = Index(before.Vertices);
-        _beforeHalfEdges = Index(before.HalfEdges);
-        _beforeFaces = Index(before.Faces);
+        _beforeVertices = EntitySnapshot<VertexTag>.IndexByHandle(before.Vertices);
+        _beforeHalfEdges = EntitySnapshot<HalfEdgeTag>.IndexByHandle(before.HalfEdges);
+        _beforeFaces = EntitySnapshot<FaceTag>.IndexByHandle(before.Faces);
 #if DEBUG
         _debugInitialFullState = mesh.CaptureFullTopologyPatchState();
 #endif
@@ -249,23 +249,6 @@ public sealed class TopologyEditScope
         where TConnectivity : unmanaged
     {
         HashSet<Handle<TTag>> included = [.. beforeHandles, .. allocatedHandles];
-        List<EntitySnapshot<TTag>> snapshots = [];
-        foreach (Handle<TTag> handle in storage)
-        {
-            if (included.Contains(handle))
-                snapshots.Add(storage.Capture(handle));
-        }
-        return snapshots.ToArray();
-    }
-
-    private static Dictionary<Handle<TTag>, EntitySnapshot<TTag>> Index<TTag>(
-        IReadOnlyList<EntitySnapshot<TTag>> snapshots
-    )
-        where TTag : unmanaged
-    {
-        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> result = new(snapshots.Count);
-        for (int i = 0; i < snapshots.Count; i++)
-            result.Add(snapshots[i].Handle, snapshots[i]);
-        return result;
+        return storage.CaptureIncluded(included);
     }
 }

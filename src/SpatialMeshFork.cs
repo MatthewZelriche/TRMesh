@@ -39,9 +39,9 @@ public sealed class SpatialMeshFork : ISpatialMeshView
 
         _baseMesh = baseMesh;
         Delta = delta;
-        _afterVertices = Index(delta.After.Vertices);
-        _afterHalfEdges = Index(delta.After.HalfEdges);
-        _afterFaces = Index(delta.After.Faces);
+        _afterVertices = EntitySnapshot<VertexTag>.IndexByHandle(delta.After.Vertices);
+        _afterHalfEdges = EntitySnapshot<HalfEdgeTag>.IndexByHandle(delta.After.HalfEdges);
+        _afterFaces = EntitySnapshot<FaceTag>.IndexByHandle(delta.After.Faces);
         _affectedVertices = [.. delta.AffectedVertices];
         _affectedHalfEdges = [.. delta.AffectedHalfEdges];
         _affectedFaces = [.. delta.AffectedFaces];
@@ -228,23 +228,12 @@ public sealed class SpatialMeshFork : ISpatialMeshView
 
     private static void ValidateSchemas(SpatialMesh mesh, TopologyDelta delta)
     {
-        ValidateSchemas(mesh.Vertices, delta.Before.Vertices);
-        ValidateSchemas(mesh.Vertices, delta.After.Vertices);
-        ValidateSchemas(mesh.HalfEdges, delta.Before.HalfEdges);
-        ValidateSchemas(mesh.HalfEdges, delta.After.HalfEdges);
-        ValidateSchemas(mesh.Faces, delta.Before.Faces);
-        ValidateSchemas(mesh.Faces, delta.After.Faces);
-    }
-
-    private static void ValidateSchemas<TTag, TConnectivity>(
-        TopologyStorage<TTag, TConnectivity> storage,
-        IReadOnlyList<EntitySnapshot<TTag>> snapshots
-    )
-        where TTag : unmanaged
-        where TConnectivity : unmanaged
-    {
-        for (int i = 0; i < snapshots.Count; i++)
-            storage.ValidateSnapshotSchema(snapshots[i]);
+        mesh.Vertices.ValidateSnapshotSchemas(delta.Before.Vertices);
+        mesh.Vertices.ValidateSnapshotSchemas(delta.After.Vertices);
+        mesh.HalfEdges.ValidateSnapshotSchemas(delta.Before.HalfEdges);
+        mesh.HalfEdges.ValidateSnapshotSchemas(delta.After.HalfEdges);
+        mesh.Faces.ValidateSnapshotSchemas(delta.Before.Faces);
+        mesh.Faces.ValidateSnapshotSchemas(delta.After.Faces);
     }
 
     private static void ValidateBaseState<TTag, TConnectivity>(
@@ -275,22 +264,6 @@ public sealed class SpatialMeshFork : ISpatialMeshView
             if (!beforeHandles.Contains(handle) && storage.IsAlive(handle))
                 ThrowBaseMismatch(handle);
         }
-    }
-
-    private static Dictionary<Handle<TTag>, EntitySnapshot<TTag>> Index<TTag>(
-        IReadOnlyList<EntitySnapshot<TTag>> snapshots
-    )
-        where TTag : unmanaged
-    {
-        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> result = new(snapshots.Count);
-        for (int i = 0; i < snapshots.Count; i++)
-        {
-            EntitySnapshot<TTag> snapshot = snapshots[i];
-            if (!result.TryAdd(snapshot.Handle, snapshot))
-                throw new ArgumentException($"Topology delta contains duplicate handle {snapshot.Handle}.");
-        }
-
-        return result;
     }
 
     private static void ThrowDead<TTag>(Handle<TTag> handle)

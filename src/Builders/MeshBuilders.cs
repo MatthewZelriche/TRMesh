@@ -86,12 +86,6 @@ public static class MeshBuilders
             float cx = (float)Math.Cos(angle) * radiusX;
             float cz = (float)Math.Sin(angle) * radiusZ;
             bottom[i] = mesh.AddVertex(new Vector3(c.X + cx, c.Y - halfH, c.Z + cz));
-        }
-        for (int i = 0; i < n; i++)
-        {
-            double angle = 2.0 * Math.PI * i / n;
-            float cx = (float)Math.Cos(angle) * radiusX;
-            float cz = (float)Math.Sin(angle) * radiusZ;
             top[i] = mesh.AddVertex(new Vector3(c.X + cx, c.Y + halfH, c.Z + cz));
         }
 

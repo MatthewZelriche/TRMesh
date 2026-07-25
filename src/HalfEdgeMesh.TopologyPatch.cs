@@ -118,16 +118,7 @@ public partial class HalfEdgeMesh
         HashSet<Handle<TTag>> included
     )
         where TTag : unmanaged
-        where TConnectivity : unmanaged
-    {
-        List<EntitySnapshot<TTag>> snapshots = [];
-        foreach (Handle<TTag> handle in storage)
-        {
-            if (included.Contains(handle))
-                snapshots.Add(storage.Capture(handle));
-        }
-        return snapshots.ToArray();
-    }
+        where TConnectivity : unmanaged => storage.CaptureIncluded(included);
 
 #if DEBUG
     internal TopologyPatchState CaptureFullTopologyPatchState() =>

@@ -74,4 +74,24 @@ internal sealed class EntitySnapshot<TTag>
 
         return _componentData.AsSpan().SequenceEqual(other._componentData);
     }
+
+    internal static Dictionary<Handle<TTag>, EntitySnapshot<TTag>> IndexByHandle(
+        IReadOnlyList<EntitySnapshot<TTag>> snapshots
+    )
+    {
+        ArgumentNullException.ThrowIfNull(snapshots);
+        Dictionary<Handle<TTag>, EntitySnapshot<TTag>> result = new(snapshots.Count);
+        for (int i = 0; i < snapshots.Count; i++)
+        {
+            EntitySnapshot<TTag> snapshot = snapshots[i];
+            if (!result.TryAdd(snapshot.Handle, snapshot))
+            {
+                throw new ArgumentException(
+                    $"Topology snapshot list contains duplicate handle {snapshot.Handle}."
+                );
+            }
+        }
+
+        return result;
+    }
 }

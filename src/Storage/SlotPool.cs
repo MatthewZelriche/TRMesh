@@ -120,14 +120,7 @@ internal sealed class SlotPool<TTag>
                 $"Handle {snapshot.Handle} does not refer to a reserved slot."
             );
 
-        int expectedBytes = 0;
-        for (int i = 0; i < _columns.Count; i++)
-            expectedBytes = checked(expectedBytes + _columns[i].ElementSize);
-        if (snapshot.ComponentData.Length != expectedBytes)
-            throw new ArgumentException(
-                "Entity snapshot component data does not match the registered columns.",
-                nameof(snapshot)
-            );
+        EnsureComponentDataMatchesColumns(snapshot);
 
         if (!_set.RestoreReserved(snapshot.Handle))
             throw new InvalidOperationException("Failed to restore a previously validated handle.");
@@ -144,14 +137,7 @@ internal sealed class SlotPool<TTag>
         if (!_set.Contains(snapshot.Handle))
             ThrowInvalid(snapshot.Handle);
 
-        int expectedBytes = 0;
-        for (int i = 0; i < _columns.Count; i++)
-            expectedBytes = checked(expectedBytes + _columns[i].ElementSize);
-        if (snapshot.ComponentData.Length != expectedBytes)
-            throw new ArgumentException(
-                "Entity snapshot component data does not match the registered columns.",
-                nameof(snapshot)
-            );
+        EnsureComponentDataMatchesColumns(snapshot);
 
         int denseIndex = _set.GetDenseIndex(snapshot.Handle);
         ReadOnlySpan<byte> data = snapshot.ComponentData.Span;
@@ -222,6 +208,20 @@ internal sealed class SlotPool<TTag>
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => new(_set);
+    }
+
+    private void EnsureComponentDataMatchesColumns(EntitySnapshot<TTag> snapshot)
+    {
+        int expectedBytes = 0;
+        for (int i = 0; i < _columns.Count; i++)
+            expectedBytes = checked(expectedBytes + _columns[i].ElementSize);
+        if (snapshot.ComponentData.Length != expectedBytes)
+        {
+            throw new ArgumentException(
+                "Entity snapshot component data does not match the registered columns.",
+                nameof(snapshot)
+            );
+        }
     }
 
     private static void ThrowInvalid(Handle<TTag> handle)
