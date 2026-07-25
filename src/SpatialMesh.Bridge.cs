@@ -96,33 +96,32 @@ public partial class SpatialMesh
         List<FaceHandle> faces = [];
         for (int row = 0; row < segments; row++)
         {
-            FaceHandle face = AddFace([left[row], right[row], right[row + 1], left[row + 1]]);
-            SetFaceMaterialSlot(face, plan.MaterialSlot);
-            SetFaceUvsInitialized(face, false);
-            faces.Add(face);
+            faces.Add(
+                AddBridgeFace(
+                    [left[row], right[row], right[row + 1], left[row + 1]],
+                    plan.MaterialSlot
+                )
+            );
         }
 
         if (segments > 1 && hasArch && !plan.LeftConnector.IsNull)
-        {
-            FaceHandle face = AddFace(left);
-            SetFaceMaterialSlot(face, plan.MaterialSlot);
-            SetFaceUvsInitialized(face, false);
-            faces.Add(face);
-        }
+            faces.Add(AddBridgeFace(left, plan.MaterialSlot));
         if (segments > 1 && hasArch && !plan.RightConnector.IsNull)
-        {
-            VertexHandle[] reversedRight = Enumerable.Reverse(right).ToArray();
-            FaceHandle face = AddFace(reversedRight);
-            SetFaceMaterialSlot(face, plan.MaterialSlot);
-            SetFaceUvsInitialized(face, false);
-            faces.Add(face);
-        }
+            faces.Add(AddBridgeFace(Enumerable.Reverse(right).ToArray(), plan.MaterialSlot));
 
         return new BridgeEdgesResult(
             faces.ToArray(),
             newVertices.ToArray(),
             plan.SourceHadInitializedUvs
         );
+    }
+
+    private FaceHandle AddBridgeFace(ReadOnlySpan<VertexHandle> loop, int materialSlot)
+    {
+        FaceHandle face = AddFace(loop);
+        SetFaceMaterialSlot(face, materialSlot);
+        SetFaceUvsInitialized(face, false);
+        return face;
     }
 
     /// <summary>

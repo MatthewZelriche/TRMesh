@@ -62,12 +62,7 @@ public sealed class TopologyEditScope
         }
 #endif
 
-        ReleaseCreatedAndRemoved(_mesh.Vertices, _allocatedVertices, _beforeVertices);
-        ReleaseCreatedAndRemoved(_mesh.HalfEdges, _allocatedHalfEdges, _beforeHalfEdges);
-        ReleaseCreatedAndRemoved(_mesh.Faces, _allocatedFaces, _beforeFaces);
-
-        TopologyPatchState before = BuildBeforeState();
-        TopologyPatchState after = BuildCurrentState();
+        ReleaseAndCaptureStates(out TopologyPatchState before, out TopologyPatchState after);
         TopologyPatch patch = new(_mesh, new TopologyDelta(before, after));
         Complete();
         return patch;
@@ -79,12 +74,7 @@ public sealed class TopologyEditScope
             return;
 
         StopTracking();
-        ReleaseCreatedAndRemoved(_mesh.Vertices, _allocatedVertices, _beforeVertices);
-        ReleaseCreatedAndRemoved(_mesh.HalfEdges, _allocatedHalfEdges, _beforeHalfEdges);
-        ReleaseCreatedAndRemoved(_mesh.Faces, _allocatedFaces, _beforeFaces);
-
-        TopologyPatchState before = BuildBeforeState();
-        TopologyPatchState after = BuildCurrentState();
+        ReleaseAndCaptureStates(out TopologyPatchState before, out TopologyPatchState after);
         using (TopologyPatch rollback = new(_mesh, new TopologyDelta(before, after)))
             rollback.ApplyBefore();
         Complete();
@@ -108,6 +98,19 @@ public sealed class TopologyEditScope
 
     void ITopologyStorageEditTracker<FaceTag>.OnReserved(EntitySnapshot<FaceTag> snapshot) =>
         AddRemovedSnapshot(snapshot, _allocatedFaces, _beforeFaces);
+
+    private void ReleaseAndCaptureStates(
+        out TopologyPatchState before,
+        out TopologyPatchState after
+    )
+    {
+        ReleaseCreatedAndRemoved(_mesh.Vertices, _allocatedVertices, _beforeVertices);
+        ReleaseCreatedAndRemoved(_mesh.HalfEdges, _allocatedHalfEdges, _beforeHalfEdges);
+        ReleaseCreatedAndRemoved(_mesh.Faces, _allocatedFaces, _beforeFaces);
+
+        before = BuildBeforeState();
+        after = BuildCurrentState();
+    }
 
     private TopologyPatchState BuildBeforeState() =>
         new(
