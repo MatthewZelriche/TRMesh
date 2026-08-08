@@ -5,6 +5,13 @@
     <RootNamespace>tr_mesh</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <EmbeddedResource Remove="tests/**" />
+    <None Remove="tests/**" />
+  </ItemGroup>
 
 </Project>
