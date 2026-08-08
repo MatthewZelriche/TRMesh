@@ -168,4 +168,22 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
         _chunks.Add(ptr);
         _capacity += size;
     }
+
+    // Read-only chunk topology for containers which coordinate metadata or
+    // parallel storage by this list's stable global indices.
+    internal readonly int ChunkCount => _chunks.Count;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal readonly int GetChunkCapacity(int chunkIndex)
+    {
+        Debug.Assert((uint)chunkIndex < (uint)_chunks.Count);
+        return ChunkElements(chunkIndex);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal readonly void ResolveIndex(int index, out int chunkIndex, out int localIndex)
+    {
+        Debug.Assert((uint)index < (uint)_capacity);
+        Resolve(index, out chunkIndex, out localIndex);
+    }
 }

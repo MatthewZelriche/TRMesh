@@ -404,4 +404,48 @@ public unsafe class UnsafeChunkedListTests
         Assert.Equal(list.Capacity, values.Count);
         Assert.Equal(Enumerable.Range(0, list.Capacity), values);
     }
+
+    [Fact]
+    public void MaxChunkSize_65536_ResolvesCappedChunkBoundaries()
+    {
+        using var list = new UnsafeChunkedList<int>(maxChunkSize: 1 << 16);
+
+        list[65_503] = 1;
+        Assert.Equal(65_504, list.Capacity);
+
+        list[65_504] = 2;
+        Assert.Equal(131_040, list.Capacity);
+
+        list[131_039] = 3;
+        Assert.Equal(131_040, list.Capacity);
+
+        list[131_040] = 4;
+        Assert.Equal(196_576, list.Capacity);
+
+        Assert.Equal(1 << 16, list.MaxChunkSize);
+        Assert.Equal(1, list[65_503]);
+        Assert.Equal(2, list[65_504]);
+        Assert.Equal(3, list[131_039]);
+        Assert.Equal(4, list[131_040]);
+    }
+
+    [Fact]
+    public void MaxChunkSize_65536_GrowthKeepsExistingElementAddressStable()
+    {
+        using var list = new UnsafeChunkedList<int>(maxChunkSize: 1 << 16);
+        list[65_504] = 42;
+
+        int* addressBefore;
+        fixed (int* address = &list[65_504])
+            addressBefore = address;
+
+        list[131_040] = 99;
+
+        int* addressAfter;
+        fixed (int* address = &list[65_504])
+            addressAfter = address;
+
+        Assert.True(addressBefore == addressAfter);
+        Assert.Equal(42, *addressBefore);
+    }
 }
