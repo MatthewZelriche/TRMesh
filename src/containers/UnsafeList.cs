@@ -23,7 +23,7 @@ public unsafe struct UnsafeList<T> : IDisposable
             SetCapacity(initialCapacity);
     }
 
-    public ref T this[int index]
+    public readonly ref T this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
@@ -96,7 +96,7 @@ public unsafe struct UnsafeList<T> : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Enumerator GetEnumerator() => new(Ptr, Count);
+    public readonly Enumerator GetEnumerator() => new(Ptr, Count);
 
     public ref struct Enumerator
     {

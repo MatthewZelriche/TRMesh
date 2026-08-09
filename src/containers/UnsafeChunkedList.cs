@@ -8,7 +8,8 @@ namespace TRMesh.Containers;
 // Unmanaged array with geometric chunk sizes (32, 64, 128, 256, …), optionally
 // capped so later chunks stay at MaxChunkSize (…, 65536, 65536, …).
 // MaxChunkSize must be a power of two (>= 32) so capped lookup stays shift/mask-based.
-// Every allocated slot is zero-initialized. Capacity is the allocated extent.
+// Every allocated slot is zero-initialized. Capacity is the stable logical extent;
+// internal owning containers may temporarily release individual chunk storage.
 // Owns native chunk buffers via fields stored directly on the struct — do not copy;
 // dispose only once.
 public unsafe struct UnsafeChunkedList<T> : IDisposable
@@ -20,6 +21,7 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     // Each element is a T* stored as nint (pointer types cannot be generic args).
     UnsafeList<nint> _chunks;
     int _capacity;
+    int _elementStride;
 
     // 0 = uncapped; otherwise power-of-two per-chunk cap.
     int _maxChunkSize;
@@ -37,9 +39,21 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     // maxChunkSize: 0 = uncapped geometric growth. Otherwise a power of two
     // >= 32; chunks grow geometrically until that size, then stay there.
     public UnsafeChunkedList(int initialCapacity = 0, int maxChunkSize = 0)
+        : this(initialCapacity, maxChunkSize, 0) { }
+
+    // A nonzero minimumElementStride reserves and aligns storage for containers
+    // which overlay metadata while a slot is unused.
+    internal UnsafeChunkedList(int initialCapacity, int maxChunkSize, int minimumElementStride)
     {
+        Debug.Assert(minimumElementStride >= 0);
         _chunks = default;
         _capacity = 0;
+        _elementStride =
+            minimumElementStride == 0
+                ? sizeof(T)
+                : (Math.Max(sizeof(T), minimumElementStride) + minimumElementStride - 1)
+                    / minimumElementStride
+                    * minimumElementStride;
 
         if (maxChunkSize <= 0)
         {
@@ -62,11 +76,11 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
             SetCapacity(initialCapacity);
     }
 
-    // Total zero-initialized elements addressable with currently allocated chunks.
-    public int Capacity => _capacity;
+    // Total elements represented by the stable chunk topology.
+    public readonly int Capacity => _capacity;
 
     // 0 when uncapped; otherwise the per-chunk element cap.
-    public int MaxChunkSize => _maxChunkSize;
+    public readonly int MaxChunkSize => _maxChunkSize;
 
     // Auto-grows when index >= Capacity. New chunks are zero-filled on allocate.
     public ref T this[int index]
@@ -105,7 +119,7 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Enumerator GetEnumerator() => new(this);
+    public readonly Enumerator GetEnumerator() => new(this);
 
     public ref struct Enumerator
     {
@@ -129,10 +143,38 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    ref T ElementRef(int index)
+    readonly ref T ElementRef(int index)
     {
         Resolve(index, out var chunkIndex, out var localIndex);
-        return ref ((T*)_chunks[chunkIndex])[localIndex];
+        return ref ElementRef(chunkIndex, localIndex);
+    }
+
+    // Byte stride between consecutive elements in a chunk. May exceed sizeof(T)
+    // when an owning container overlays larger unused-slot metadata.
+    internal readonly int ElementStride => _elementStride;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal readonly byte* ChunkBase(int chunkIndex)
+    {
+        Debug.Assert((uint)chunkIndex < (uint)_chunks.Count);
+        return (byte*)_chunks.Ptr[chunkIndex];
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal readonly ref T ElementRef(int chunkIndex, int localIndex)
+    {
+        Debug.Assert((uint)chunkIndex < (uint)_chunks.Count);
+        return ref ElementRef(ChunkBase(chunkIndex), localIndex);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal readonly ref T ElementRef(byte* chunkBase, int localIndex)
+    {
+        // Common case: no metadata padding; scale folds into the address mode.
+        if (_elementStride == sizeof(T))
+            return ref *((T*)chunkBase + localIndex);
+
+        return ref *(T*)(chunkBase + (nuint)localIndex * (nuint)_elementStride);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -157,6 +199,7 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     readonly int ChunkElements(int chunkIndex)
     {
         var firstCappedChunk = _firstCappedChunkPlusOne - 1;
+        // Likely compiles down to a branchless cmp + cmov
         return (uint)chunkIndex < firstCappedChunk ? BaseChunkSize << chunkIndex : _maxChunkSize;
     }
 
@@ -164,7 +207,10 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     {
         var size = ChunkElements(_chunks.Count);
         Debug.Assert(size > 0);
-        var ptr = (nint)NativeMemory.AllocZeroed((nuint)size * (nuint)sizeof(T));
+        if (_elementStride == 0)
+            _elementStride = sizeof(T);
+
+        var ptr = (nint)NativeMemory.AllocZeroed((nuint)size * (nuint)_elementStride);
         _chunks.Add(ptr);
         _capacity += size;
     }
@@ -172,6 +218,25 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
     // Read-only chunk topology for containers which coordinate metadata or
     // parallel storage by this list's stable global indices.
     internal readonly int ChunkCount => _chunks.Count;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal readonly int getChunkBaseIndex(int chunkIndex)
+    {
+        Debug.Assert((uint)chunkIndex < (uint)_chunks.Count);
+        var firstCappedChunk = _firstCappedChunkPlusOne - 1;
+        if ((uint)chunkIndex < firstCappedChunk)
+        {
+            // Geometric chunk
+            return (BaseChunkSize << chunkIndex) - BaseChunkSize;
+        }
+        else
+        {
+            // Capped chunk
+            return (int)(
+                ((uint)(chunkIndex - (int)firstCappedChunk + 1) << _maxChunkBits) - BaseChunkSize
+            );
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal readonly int GetChunkCapacity(int chunkIndex)
