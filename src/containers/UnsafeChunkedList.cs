@@ -142,9 +142,12 @@ public unsafe struct UnsafeChunkedList<T> : IDisposable
         public bool MoveNext() => ++_index < _list._capacity;
     }
 
+    // Non-growing access to the element at a given index.
+    // Must be a valid index! Otherwise use the this[] indexer.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    readonly ref T ElementRef(int index)
+    internal readonly ref T ElementRef(int index)
     {
+        Debug.Assert((uint)index < (uint)_capacity);
         Resolve(index, out var chunkIndex, out var localIndex);
         return ref ElementRef(chunkIndex, localIndex);
     }

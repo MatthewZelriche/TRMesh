@@ -336,9 +336,54 @@ public unsafe class UnsafeColonyTests
     }
 
     [Fact]
+    public void Enumerate_PaddedElementsAcrossChunks()
+    {
+        using var colony = new UnsafeColony<byte>();
+        for (var value = 0; value < 40; value++)
+            colony.Insert((byte)value);
+
+        colony.RemoveAt(1);
+        colony.RemoveAt(32);
+
+        var values = new List<byte>();
+        foreach (ref byte value in colony)
+            values.Add(value);
+
+        Assert.Equal(
+            Enumerable.Range(0, 40).Where(value => value is not 1 and not 32).Select(value => (byte)value),
+            values
+        );
+    }
+
+    [Fact]
     public void Enumerate_EmptyColony_YieldsNothing()
     {
         using var colony = new UnsafeColony<int>();
+        var count = 0;
+
+        foreach (ref int _ in colony)
+            count++;
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void Enumerate_DefaultColony_YieldsNothing()
+    {
+        UnsafeColony<int> colony = default;
+        var count = 0;
+
+        foreach (ref int _ in colony)
+            count++;
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void Enumerate_DisposedColony_YieldsNothing()
+    {
+        var colony = CreateColony(4);
+        colony.Dispose();
         var count = 0;
 
         foreach (ref int _ in colony)

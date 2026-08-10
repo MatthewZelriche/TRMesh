@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Security.Authentication.ExtendedProtection;
-using Microsoft.VisualBasic;
+using System.Runtime.InteropServices;
 
 namespace TRMesh.Containers;
 
+// A "Colony" data type, similar to plf::colony or a HopSlotMap.
+// Because this struct owns its native allocations inline, it is an error to ever copy this struct.
 public unsafe struct UnsafeColony<T> : IDisposable
     where T : unmanaged
 {
@@ -50,7 +51,12 @@ public unsafe struct UnsafeColony<T> : IDisposable
     public ref T this[int slot]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get { return ref _items[slot]; }
+        get
+        {
+            Debug.Assert((uint)slot < (uint)_skipField.Count);
+            Debug.Assert(_skipField.Ptr[slot] == 0);
+            return ref _items.ElementRef(slot);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -285,27 +291,33 @@ public unsafe struct UnsafeColony<T> : IDisposable
     //   but this is exceedingly rare.
     public ref struct Enumerator
     {
+        static readonly ushort* EmptyPtr = (ushort*)NativeMemory.AllocZeroed((nuint)sizeof(ushort));
+
         UnsafeChunkedList<T> _items;
         readonly ushort* _skipField;
         readonly int _extent;
         int _index;
         int _chunkIndex;
+        int _chunkStart;
         int _chunkEnd;
+        byte* _chunkBase;
 
         internal Enumerator(UnsafeChunkedList<T> items, ushort* skipField, int extent)
         {
             _items = items;
-            _skipField = skipField;
+            _skipField = skipField != null ? skipField : EmptyPtr;
             _extent = extent;
             _index = -1;
             _chunkIndex = 0;
+            _chunkStart = 0;
             _chunkEnd = extent == 0 ? 0 : Math.Min(items.GetChunkCapacity(0), extent);
+            _chunkBase = extent == 0 ? null : items.ChunkBase(0);
         }
 
         public ref T Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref _items[_index];
+            get => ref _items.ElementRef(_chunkBase, _index - _chunkStart);
         }
 
         // The stable slot occupied by Current, for indexing parallel storage.
@@ -337,8 +349,10 @@ public unsafe struct UnsafeColony<T> : IDisposable
                 }
 
                 // Since we aren't at the very end of the container, jump to the next chunk.
+                _chunkStart = _chunkEnd;
                 _chunkIndex++;
                 _chunkEnd = Math.Min(_chunkEnd + _items.GetChunkCapacity(_chunkIndex), _extent);
+                _chunkBase = _items.ChunkBase(_chunkIndex);
                 _index += _skipField[_index];
             }
 
