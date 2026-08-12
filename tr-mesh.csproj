@@ -12,10 +12,20 @@
     <Compile Remove="tests/**" />
     <EmbeddedResource Remove="tests/**" />
     <None Remove="tests/**" />
+    <Compile Remove="generators/**" />
+    <EmbeddedResource Remove="generators/**" />
+    <None Remove="generators/**" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="tr-mesh.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference
+      Include="generators\tr-mesh.Generators\tr-mesh.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

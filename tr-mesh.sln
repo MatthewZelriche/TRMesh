@@ -9,6 +9,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{42596496
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "tr-mesh.Tests", "tests\tr-mesh.Tests\tr-mesh.Tests.csproj", "{F59D6770-5702-405E-B364-41C0D5847ACE}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "generators", "generators", "{830C47A2-A0B8-4327-BFCB-C91A4794433D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "tr-mesh.Generators", "generators\tr-mesh.Generators\tr-mesh.Generators.csproj", "{7F34E426-D50A-4A54-9AB0-44BEAFEC57F7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,8 +30,13 @@ Global
 		{F59D6770-5702-405E-B364-41C0D5847ACE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F59D6770-5702-405E-B364-41C0D5847ACE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F59D6770-5702-405E-B364-41C0D5847ACE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7F34E426-D50A-4A54-9AB0-44BEAFEC57F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7F34E426-D50A-4A54-9AB0-44BEAFEC57F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7F34E426-D50A-4A54-9AB0-44BEAFEC57F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7F34E426-D50A-4A54-9AB0-44BEAFEC57F7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F59D6770-5702-405E-B364-41C0D5847ACE} = {42596496-CE5E-4CAB-9E87-6B20427E2AF7}
+		{7F34E426-D50A-4A54-9AB0-44BEAFEC57F7} = {830C47A2-A0B8-4327-BFCB-C91A4794433D}
 	EndGlobalSection
 EndGlobal
