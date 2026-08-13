@@ -1,5 +1,6 @@
 using TRMesh;
 using TRMesh.Containers;
+using System.Reflection;
 
 namespace tr_mesh.Tests;
 
@@ -13,6 +14,18 @@ public struct TestEntity
 
 public unsafe class SoAGeneratorTests
 {
+    [Fact]
+    public void InsertWithoutValue_InitializesStandaloneFieldsToDefault()
+    {
+        using var soa = new TestEntitySoA();
+
+        var slot = soa.Insert();
+
+        Assert.Equal(0, soa.Get(slot).Id);
+        Assert.Equal(0f, soa.Get(slot).Health);
+        Assert.Equal(0, soa.Get(slot).Flags);
+    }
+
     [Fact]
     public void Insert_Get_ExposesMutableFieldRefs()
     {
@@ -176,6 +189,117 @@ public unsafe class SoAGeneratorTests
         Assert.Equal(8, view.View);
     }
 
+    [Fact]
+    public void TargetedDerivedSoA_CombinesBaseAndDerivedFieldsInOneSlotDomain()
+    {
+        using var mesh = new TargetSpatialMesh();
+        var first = mesh.Insert(
+            new TopologyInfo { Vertex = 10, Next = 11 },
+            new SpatialInfo { Position = 12f, UV = 13f }
+        );
+        var second = mesh.Insert(
+            new TopologyInfo { Vertex = 20, Next = 21 },
+            new SpatialInfo { Position = 22f, UV = 23f }
+        );
+
+        Assert.Equal(2, mesh.Count);
+        Assert.Equal(10, mesh.Get(first).Vertex);
+        Assert.Equal(11, mesh.Get(first).Next);
+        Assert.Equal(12f, mesh.Get(first).Position);
+        Assert.Equal(13f, mesh.Get(first).UV);
+
+        TargetMesh topology = mesh;
+        Assert.Equal(20, topology.Get(second).Vertex);
+        Assert.Equal(21, topology.Get(second).Next);
+    }
+
+    [Fact]
+    public void TargetedDerivedSoA_InheritedInsertResetsDerivedColumnsOnReusedSlot()
+    {
+        using var mesh = new TargetSpatialMesh();
+        var removed = mesh.Insert(
+            new TopologyInfo { Vertex = 1, Next = 2 },
+            new SpatialInfo { Position = 3f, UV = 4f }
+        );
+        mesh.RemoveAt(removed);
+
+        var reused = mesh.Insert(new TopologyInfo { Vertex = 5, Next = 6 });
+
+        Assert.Equal(removed, reused);
+        Assert.Equal(5, mesh.Get(reused).Vertex);
+        Assert.Equal(0f, mesh.Get(reused).Position);
+        Assert.Equal(0f, mesh.Get(reused).UV);
+    }
+
+    [Fact]
+    public void TargetedDerivedSoA_InsertWithoutValuesDefaultsEveryColumn()
+    {
+        using var mesh = new TargetSpatialMesh();
+        var removed = mesh.Insert(
+            new TopologyInfo { Vertex = 1, Next = 2 },
+            new SpatialInfo { Position = 3f, UV = 4f }
+        );
+        mesh.RemoveAt(removed);
+
+        var reused = mesh.Insert();
+        var view = mesh.Get(reused);
+
+        Assert.Equal(removed, reused);
+        Assert.Equal(0, view.Vertex);
+        Assert.Equal(0, view.Next);
+        Assert.Equal(0f, view.Position);
+        Assert.Equal(0f, view.UV);
+    }
+
+    [Fact]
+    public void TargetedDerivedSoA_EnumerationUsesRootLivenessAndCombinedView()
+    {
+        using var mesh = new TargetSpatialMesh();
+        mesh.Insert(
+            new TopologyInfo { Vertex = 1, Next = 2 },
+            new SpatialInfo { Position = 3f, UV = 4f }
+        );
+        var removed = mesh.Insert(
+            new TopologyInfo { Vertex = 5, Next = 6 },
+            new SpatialInfo { Position = 7f, UV = 8f }
+        );
+        mesh.Insert(
+            new TopologyInfo { Vertex = 9, Next = 10 },
+            new SpatialInfo { Position = 11f, UV = 12f }
+        );
+        mesh.RemoveAt(removed);
+
+        var values = new List<(int Vertex, float Position)>();
+        foreach (TargetSpatialMesh.View view in mesh)
+            values.Add((view.Vertex, view.Position));
+
+        Assert.Equal(new[] { (1, 3f), (9, 11f) }, values);
+    }
+
+    [Fact]
+    public void TargetedSoA_UnionsMultipleComponentsOnOneClass()
+    {
+        using var target = new MultiComponentTarget();
+        var slot = target.Insert(new AlphaInfo { Alpha = 31 }, new BetaInfo { Beta = 32f });
+
+        Assert.Equal(31, target.Get(slot).Alpha);
+        Assert.Equal(32f, target.Get(slot).Beta);
+    }
+
+    [Fact]
+    public void TargetedDerivedSoA_HasNoSecondColony()
+    {
+        var baseOwnsColony = typeof(TargetMesh)
+            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .Any(IsUnsafeColonyField);
+        var derivedOwnsColony = typeof(TargetSpatialMesh)
+            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .Any(IsUnsafeColonyField);
+
+        Assert.True(baseOwnsColony);
+        Assert.False(derivedOwnsColony);
+    }
+
     static List<int> EnumerateIds(TestEntitySoA soa)
     {
         var ids = new List<int>();
@@ -183,4 +307,8 @@ public unsafe class SoAGeneratorTests
             ids.Add(view.Id);
         return ids;
     }
+
+    static bool IsUnsafeColonyField(FieldInfo field) =>
+        field.FieldType.IsGenericType
+        && field.FieldType.GetGenericTypeDefinition() == typeof(UnsafeColony<>);
 }

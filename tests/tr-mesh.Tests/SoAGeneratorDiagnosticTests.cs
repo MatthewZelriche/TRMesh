@@ -12,7 +12,11 @@ public class SoAGeneratorDiagnosticTests
         namespace TRMesh
         {
             [AttributeUsage(AttributeTargets.Struct)]
-            public sealed class SoAAttribute : Attribute { }
+            public sealed class SoAAttribute : Attribute
+            {
+                public SoAAttribute() { }
+                public SoAAttribute(Type onto) { }
+            }
         }
 
         """;
@@ -34,6 +38,9 @@ public class SoAGeneratorDiagnosticTests
     [InlineData("[TRMesh.SoA] public unsafe struct Sample { public fixed int Value[4]; }", "TRMSOA002")]
     [InlineData("[TRMesh.SoA] public unsafe struct Sample { public delegate*<void> Value; }", "TRMSOA002")]
     [InlineData("[TRMesh.SoA] public struct Sample { private int Value; }", "TRMSOA001")]
+    [InlineData("[TRMesh.SoA(typeof(Target))] public struct Sample { public int Value; } public struct Target { }", "TRMSOA005")]
+    [InlineData("[TRMesh.SoA(typeof(Target))] public struct Sample { public int Value; } public class Target { }", "TRMSOA006")]
+    [InlineData("public partial class Target { } [TRMesh.SoA(typeof(Target))] public struct SampleA { public int Value; } [TRMesh.SoA(typeof(Target))] public struct SampleB { public int Value; }", "TRMSOA007")]
     public void UnsupportedStruct_ReportsExpectedDiagnostic(string declaration, string diagnosticId)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.CSharp12);

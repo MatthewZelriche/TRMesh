@@ -44,4 +44,36 @@ namespace tr_mesh.Tests
         public int slot;
         public int View;
     }
+
+    [SoA(typeof(TargetMesh))]
+    public struct TopologyInfo
+    {
+        public int Vertex;
+        public int Next;
+    }
+
+    public partial class TargetMesh { }
+
+    [SoA(typeof(TargetSpatialMesh))]
+    public struct SpatialInfo
+    {
+        public float Position;
+        public float UV;
+    }
+
+    public partial class TargetSpatialMesh : TargetMesh { }
+
+    [SoA(typeof(MultiComponentTarget))]
+    public struct AlphaInfo
+    {
+        public int Alpha;
+    }
+
+    [SoA(typeof(MultiComponentTarget))]
+    public struct BetaInfo
+    {
+        public float Beta;
+    }
+
+    public partial class MultiComponentTarget { }
 }
