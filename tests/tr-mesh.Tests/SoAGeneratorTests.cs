@@ -15,6 +15,21 @@ public struct TestEntity
 public unsafe class SoAGeneratorTests
 {
     [Fact]
+    public void IsAlive_TracksInsertedAndRemovedSlots()
+    {
+        using var soa = new TestEntitySoA();
+
+        Assert.False(soa.IsAlive(0));
+        Assert.False(soa.IsAlive(-1));
+
+        var slot = soa.Insert();
+        Assert.True(soa.IsAlive(slot));
+
+        soa.RemoveAt(slot);
+        Assert.False(soa.IsAlive(slot));
+    }
+
+    [Fact]
     public void InsertWithoutValue_InitializesStandaloneFieldsToDefault()
     {
         using var soa = new TestEntitySoA();

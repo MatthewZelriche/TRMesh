@@ -555,6 +555,12 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
 
+        sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        sb.Append("    public bool IsAlive(int slot) => ")
+            .Append(rootAnchor.StorageName)
+            .AppendLine(".IsActive(slot);");
+        sb.AppendLine();
+
         AppendDefaultInsert(sb, target.Components, isDerived: false);
         AppendInsertSignature(sb, target.Components, parameterNames);
         sb.AppendLine("    {");
@@ -982,6 +988,12 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("        get => ").Append(colony.StorageName).AppendLine(".Count;");
         sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        sb.Append("    public bool IsAlive(int slot) => ")
+            .Append(colony.StorageName)
+            .AppendLine(".IsActive(slot);");
         sb.AppendLine();
 
         sb.Append("    public int Insert() => Insert(default(")
