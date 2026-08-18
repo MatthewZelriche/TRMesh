@@ -860,6 +860,12 @@ public sealed class SoAGenerator : IIncrementalGenerator
             .AppendLine("(_soa, _inner.CurrentSlot);");
         sb.AppendLine("        }");
         sb.AppendLine();
+        sb.AppendLine("        public int CurrentSlot");
+        sb.AppendLine("        {");
+        sb.AppendLine("            [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        sb.AppendLine("            get => _inner.CurrentSlot;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.AppendLine("        public bool MoveNext() => _inner.MoveNext();");
         sb.AppendLine("    }");
@@ -1155,6 +1161,12 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.Append("            get => new ")
             .Append(viewName)
             .AppendLine("(_soa, _inner.CurrentSlot);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        public int CurrentSlot");
+        sb.AppendLine("        {");
+        sb.AppendLine("            [MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        sb.AppendLine("            get => _inner.CurrentSlot;");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");

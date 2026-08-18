@@ -73,7 +73,7 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
-    public void Enumerator_SkipsRemovedSlots_AndReturnsSameViewType()
+    public void Enumerator_SkipsRemovedSlots_AndReportsStableSlots()
     {
         using var soa = new TestEntitySoA();
 
@@ -84,10 +84,16 @@ public unsafe class SoAGeneratorTests
         soa.RemoveAt(second);
 
         var seen = new List<int>();
-        foreach (TestEntitySoA.View view in soa)
-            seen.Add(view.Id);
+        var seenSlots = new List<int>();
+        var enumerator = soa.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            seen.Add(enumerator.Current.Id);
+            seenSlots.Add(enumerator.CurrentSlot);
+        }
 
         Assert.Equal(new[] { 1, 3 }, seen);
+        Assert.Equal(new[] { first, third }, seenSlots);
         Assert.Equal(2, soa.Count);
 
         // Keep first/third alive for clarity in failure messages.
