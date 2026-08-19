@@ -63,20 +63,22 @@ public class SpatialMeshSerializationTests
         Assert.Equal(0f, reader.ReadSingle());
         Assert.Equal(0f, reader.ReadSingle());
         Assert.Equal(0f, reader.ReadSingle());
-        Assert.Equal(Uv.X, reader.ReadSingle());
-        Assert.Equal(Uv.Y, reader.ReadSingle());
 
-        stream.Position = 20 + (3 * 24);
+        stream.Position = 20 + (3 * 16);
         Assert.Equal(0, reader.ReadInt32());
         Assert.Equal(2, reader.ReadInt32());
         Assert.Equal(4, reader.ReadInt32());
         Assert.Equal(0, reader.ReadInt32());
+        Assert.Equal(Uv.X, reader.ReadSingle());
+        Assert.Equal(Uv.Y, reader.ReadSingle());
         Assert.Equal(1, reader.ReadInt32());
         Assert.Equal(5, reader.ReadInt32());
         Assert.Equal(3, reader.ReadInt32());
         Assert.Equal(SpatialMesh.INVALID_HANDLE, reader.ReadInt32());
+        Assert.Equal(0f, reader.ReadSingle());
+        Assert.Equal(0f, reader.ReadSingle());
 
-        stream.Position = 20 + (3 * 24) + (3 * 32);
+        stream.Position = 20 + (3 * 16) + (3 * 48);
         Assert.Equal(0, reader.ReadInt32());
         Assert.Equal(0f, reader.ReadSingle());
         Assert.Equal(0f, reader.ReadSingle());
@@ -109,12 +111,12 @@ public class SpatialMeshSerializationTests
     public void RoundTrip_SharedEdgeMesh_PreservesSnapshotBytesAndTopology()
     {
         using var source = new SpatialMesh();
-        int v0 = source.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = source.AddVertex(new Vector3(1, 0, 0), new Vector2(1, 0));
-        int v2 = source.AddVertex(new Vector3(0, 1, 0), new Vector2(0, 1));
-        int v3 = source.AddVertex(new Vector3(1, 1, 0), new Vector2(1, 1));
-        source.AddFace([v0, v1, v2]);
-        source.AddFace([v0, v2, v3]);
+        int v0 = source.AddVertex(new Vector3(0, 0, 0));
+        int v1 = source.AddVertex(new Vector3(1, 0, 0));
+        int v2 = source.AddVertex(new Vector3(0, 1, 0));
+        int v3 = source.AddVertex(new Vector3(1, 1, 0));
+        source.AddFace([v0, v1, v2], [Uv, new Vector2(1, 0), new Vector2(0, 1)]);
+        source.AddFace([v0, v2, v3], [new Vector2(0.5f), new Vector2(0, 1), Vector2.One]);
         byte[] expected = Serialize(source);
 
         using SpatialMesh loaded = Deserialize(expected);
@@ -128,8 +130,10 @@ public class SpatialMeshSerializationTests
 
         int firstStart = loaded.GetFace(0).AdjacentHalfEdge;
         Assert.Equal(0, loaded.GetHalfEdge(firstStart).AdjacentFace);
+        Assert.Equal(Uv, loaded.HalfEdgeUvRef(firstStart));
         int secondStart = loaded.GetFace(1).AdjacentHalfEdge;
         Assert.Equal(1, loaded.GetHalfEdge(secondStart).AdjacentFace);
+        Assert.Equal(new Vector2(0.5f), loaded.HalfEdgeUvRef(secondStart));
     }
 
     [Fact]
@@ -167,7 +171,7 @@ public class SpatialMeshSerializationTests
             Assert.True(topology.AdjacentFace is -1 or 0);
         }
 
-        int nextVertex = loaded.AddVertex(new Vector3(20, 0, 0), Uv);
+        int nextVertex = loaded.AddVertex(new Vector3(20, 0, 0));
         Assert.Equal(3, nextVertex);
     }
 
@@ -226,7 +230,7 @@ public class SpatialMeshSerializationTests
         using var source = new SpatialMesh();
         AddTriangle(source, Vector3.Zero);
         byte[] valid = Serialize(source);
-        const int firstHalfEdgeOffset = 20 + (3 * 24);
+        const int firstHalfEdgeOffset = 20 + (3 * 16);
 
         byte[] outOfRange = (byte[])valid.Clone();
         BinaryPrimitives.WriteInt32LittleEndian(outOfRange.AsSpan(firstHalfEdgeOffset + 4), 99);
@@ -239,10 +243,10 @@ public class SpatialMeshSerializationTests
 
     static void AddTriangle(SpatialMesh mesh, Vector3 offset)
     {
-        int v0 = mesh.AddVertex(offset, Uv);
-        int v1 = mesh.AddVertex(offset + Vector3.UnitX, Uv);
-        int v2 = mesh.AddVertex(offset + Vector3.UnitY, Uv);
-        mesh.AddFace([v0, v1, v2]);
+        int v0 = mesh.AddVertex(offset);
+        int v1 = mesh.AddVertex(offset + Vector3.UnitX);
+        int v2 = mesh.AddVertex(offset + Vector3.UnitY);
+        mesh.AddFace([v0, v1, v2], [Uv, Uv, Uv]);
     }
 
     static T GetStorage<T>(SpatialMesh mesh, string fieldName)

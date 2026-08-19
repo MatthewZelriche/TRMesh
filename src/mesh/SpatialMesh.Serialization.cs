@@ -62,21 +62,32 @@ public partial class SpatialMesh
                     ),
                 },
                 position = source.position,
-                uv = source.uv,
             };
         }
 
         var edges = new EdgeData[edgeSlots.Length];
         for (int id = 0; id < edgeSlots.Length; id++)
         {
-            Edge source = _edges.Get(edgeSlots[id]).topology;
+            var source = _edges.Get(edgeSlots[id]);
             edges[id] = new EdgeData
             {
                 topology = new Edge
                 {
-                    halfEdge = RemapHalfEdgeRecord(source.halfEdge, vertexIds, edgeIds, faceIds),
-                    twin = RemapHalfEdgeRecord(source.twin, vertexIds, edgeIds, faceIds),
+                    halfEdge = RemapHalfEdgeRecord(
+                        source.topology.halfEdge,
+                        vertexIds,
+                        edgeIds,
+                        faceIds
+                    ),
+                    twin = RemapHalfEdgeRecord(
+                        source.topology.twin,
+                        vertexIds,
+                        edgeIds,
+                        faceIds
+                    ),
                 },
+                halfEdgeUv = source.halfEdgeUv,
+                twinUv = source.twinUv,
             };
         }
 
@@ -112,14 +123,12 @@ public partial class SpatialMesh
             writer.Write(vertex.position.X);
             writer.Write(vertex.position.Y);
             writer.Write(vertex.position.Z);
-            writer.Write(vertex.uv.X);
-            writer.Write(vertex.uv.Y);
         }
 
         foreach (EdgeData edge in edges)
         {
-            WriteHalfEdge(writer, edge.topology.halfEdge);
-            WriteHalfEdge(writer, edge.topology.twin);
+            WriteHalfEdge(writer, edge.topology.halfEdge, edge.halfEdgeUv);
+            WriteHalfEdge(writer, edge.topology.twin, edge.twinUv);
         }
 
         foreach (FaceData face in faces)
@@ -168,7 +177,6 @@ public partial class SpatialMesh
                             reader.ReadSingle(),
                             reader.ReadSingle()
                         ),
-                        uv = new System.Numerics.Vector2(reader.ReadSingle(), reader.ReadSingle()),
                     }
                 );
                 if (slot != i)
@@ -178,14 +186,7 @@ public partial class SpatialMesh
             for (int i = 0; i < edgeCount; i++)
             {
                 int slot = mesh._edges.Insert(
-                    new EdgeData
-                    {
-                        topology = new Edge
-                        {
-                            halfEdge = ReadHalfEdge(reader),
-                            twin = ReadHalfEdge(reader),
-                        },
-                    }
+                    ReadEdgeData(reader)
                 );
                 if (slot != i)
                     throw new InvalidOperationException("Edge records were not allocated densely.");
@@ -265,12 +266,32 @@ public partial class SpatialMesh
         return id;
     }
 
-    static void WriteHalfEdge(BinaryWriter writer, HalfEdge halfEdge)
+    static void WriteHalfEdge(
+        BinaryWriter writer,
+        HalfEdge halfEdge,
+        System.Numerics.Vector2 uv
+    )
     {
         writer.Write(halfEdge.SourceVertex);
         writer.Write(halfEdge.NextHalfEdge);
         writer.Write(halfEdge.PrevHalfEdge);
         writer.Write(halfEdge.AdjacentFace);
+        writer.Write(uv.X);
+        writer.Write(uv.Y);
+    }
+
+    static EdgeData ReadEdgeData(BinaryReader reader)
+    {
+        HalfEdge halfEdge = ReadHalfEdge(reader);
+        var halfEdgeUv = new System.Numerics.Vector2(reader.ReadSingle(), reader.ReadSingle());
+        HalfEdge twin = ReadHalfEdge(reader);
+        var twinUv = new System.Numerics.Vector2(reader.ReadSingle(), reader.ReadSingle());
+        return new EdgeData
+        {
+            topology = new Edge { halfEdge = halfEdge, twin = twin },
+            halfEdgeUv = halfEdgeUv,
+            twinUv = twinUv,
+        };
     }
 
     static HalfEdge ReadHalfEdge(BinaryReader reader) =>

@@ -8,13 +8,14 @@ struct VertexData
 {
     public Vertex topology;
     public Vector3 position;
-    public Vector2 uv;
 }
 
 [SoA]
 struct EdgeData
 {
     public Edge topology;
+    public Vector2 halfEdgeUv;
+    public Vector2 twinUv;
 }
 
 [SoA]
@@ -36,24 +37,24 @@ public partial class SpatialMesh : IDisposable
     public int EdgeCount => _edges.Count;
     public int FaceCount => _faces.Count;
 
-    public int AddVertex(Vector3 position, Vector2 uv)
+    public int AddVertex(Vector3 position)
     {
         return _vertices.Insert(
             new VertexData
             {
                 topology = new Vertex { OutgoingHalfEdge = INVALID_HANDLE },
                 position = position,
-                uv = uv,
             }
         );
     }
 
     // Add a face whose boundary, in CCW order, is given by vertices.
+    // cornerUvs[i] belongs to vertices[i] in this face.
     // Returns the handle of the freshly allocated face.
     //
     // The mesh state is mutated only after a full validation pass succeeds, so a
     // thrown exception leaves the mesh in its previous state prior to this call.
-    public int AddFace(ReadOnlySpan<int> vertices)
+    public int AddFace(ReadOnlySpan<int> vertices, ReadOnlySpan<Vector2> cornerUvs)
     {
         int n = vertices.Length;
         if (n < 3)
@@ -61,6 +62,14 @@ public partial class SpatialMesh : IDisposable
                 "AddFace: Face must have at least 3 vertices.",
                 nameof(vertices)
             );
+
+        if (cornerUvs.Length != n)
+        {
+            throw new ArgumentException(
+                "AddFace: Corner UV count must match the face vertex count.",
+                nameof(cornerUvs)
+            );
+        }
 
         Span<Vector3> positions = stackalloc Vector3[n];
         var uniqueVertices = new HashSet<int>();
@@ -154,20 +163,21 @@ public partial class SpatialMesh : IDisposable
         for (int i = 0; i < n; i++)
         {
             int existing = existingHandles[i];
+            int heHandle;
             if (existing != INVALID_HANDLE)
             {
                 HalfEdgeRef(existing).AdjacentFace = faceHandle;
-                hedges[i] = existing;
-                continue;
+                heHandle = existing;
+            }
+            else
+            {
+                int nextVertex = (i + 1) % n;
+                heHandle = ConstructEdge(vertices[i], vertices[nextVertex]);
+                HalfEdgeRef(heHandle).AdjacentFace = faceHandle;
             }
 
-            int iNext = i + 1;
-            if (iNext == n)
-                iNext = 0;
-
-            int heHandle = ConstructEdge(vertices[i], vertices[iNext]);
-            HalfEdgeRef(heHandle).AdjacentFace = faceHandle;
             hedges[i] = heHandle;
+            HalfEdgeUvRef(heHandle) = cornerUvs[i];
         }
 
         _faces.Get(faceHandle).topology.AdjacentHalfEdge = hedges[0];
@@ -275,6 +285,13 @@ public partial class SpatialMesh : IDisposable
         return ref Unsafe.Add(ref view.topology.halfEdge, handle & 1);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ref Vector2 HalfEdgeUvRef(int handle)
+    {
+        var view = _edges.Get(handle >> 1);
+        return ref (handle & 1) == 0 ? ref view.halfEdgeUv : ref view.twinUv;
+    }
+
     internal ref HalfEdge GetHalfEdge(int handle) => ref HalfEdgeRef(handle);
 
     internal ref Vertex GetVertex(int slot) => ref _vertices.Get(slot).topology;
@@ -282,4 +299,6 @@ public partial class SpatialMesh : IDisposable
     internal ref Face GetFace(int slot) => ref _faces.Get(slot).topology;
 
     internal Vector3 GetFaceNormal(int slot) => _faces.Get(slot).normal;
+
+    internal Vector3 GetVertexPosition(int slot) => _vertices.Get(slot).position;
 }

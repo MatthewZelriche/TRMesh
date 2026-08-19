@@ -5,17 +5,17 @@ namespace tr_mesh.Tests;
 
 public class SpatialMeshTests
 {
-    static readonly Vector2 Uv = new(0.5f, 0.5f);
+    static readonly Vector2[] TriangleUvs = [Vector2.Zero, Vector2.UnitX, Vector2.UnitY];
 
     [Fact]
     public void AddFace_Triangle_BuildsInteriorLoopAndBoundaryTwins()
     {
         using var mesh = new SpatialMesh();
-        int v0 = mesh.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = mesh.AddVertex(new Vector3(1, 0, 0), Uv);
-        int v2 = mesh.AddVertex(new Vector3(0, 1, 0), Uv);
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
+        int v2 = mesh.AddVertex(new Vector3(0, 1, 0));
 
-        int face = mesh.AddFace([v0, v1, v2]);
+        int face = mesh.AddFace([v0, v1, v2], TriangleUvs);
 
         Assert.Equal(0, face);
         Assert.Equal(3, mesh.VertexCount);
@@ -54,13 +54,13 @@ public class SpatialMeshTests
     public void AddFace_SharedBoundaryEdge_StitchesOppositeWinding()
     {
         using var mesh = new SpatialMesh();
-        int v0 = mesh.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = mesh.AddVertex(new Vector3(1, 0, 0), Uv);
-        int v2 = mesh.AddVertex(new Vector3(0, 1, 0), Uv);
-        int v3 = mesh.AddVertex(new Vector3(1, 1, 0), Uv);
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
+        int v2 = mesh.AddVertex(new Vector3(0, 1, 0));
+        int v3 = mesh.AddVertex(new Vector3(1, 1, 0));
 
-        int first = mesh.AddFace([v0, v1, v2]);
-        int second = mesh.AddFace([v0, v2, v3]);
+        int first = mesh.AddFace([v0, v1, v2], TriangleUvs);
+        int second = mesh.AddFace([v0, v2, v3], TriangleUvs);
 
         Assert.Equal(5, mesh.EdgeCount);
         Assert.Equal(2, mesh.FaceCount);
@@ -75,12 +75,14 @@ public class SpatialMeshTests
     public void AddFace_InteriorEdge_ThrowsAndLeavesMeshUnchanged()
     {
         using var mesh = new SpatialMesh();
-        int v0 = mesh.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = mesh.AddVertex(new Vector3(1, 0, 0), Uv);
-        int v2 = mesh.AddVertex(new Vector3(0, 1, 0), Uv);
-        mesh.AddFace([v0, v1, v2]);
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
+        int v2 = mesh.AddVertex(new Vector3(0, 1, 0));
+        mesh.AddFace([v0, v1, v2], TriangleUvs);
 
-        var error = Assert.Throws<ArgumentException>(() => mesh.AddFace([v0, v1, v2]));
+        var error = Assert.Throws<ArgumentException>(
+            () => mesh.AddFace([v0, v1, v2], TriangleUvs)
+        );
         Assert.Equal("vertices", error.ParamName);
         Assert.Equal(3, mesh.EdgeCount);
         Assert.Equal(1, mesh.FaceCount);
@@ -90,11 +92,13 @@ public class SpatialMeshTests
     public void AddFace_RequiresThreeVerticesAndLiveHandles()
     {
         using var mesh = new SpatialMesh();
-        int v0 = mesh.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = mesh.AddVertex(new Vector3(1, 0, 0), Uv);
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
 
-        Assert.Throws<ArgumentException>(() => mesh.AddFace([v0, v1]));
-        Assert.Throws<ArgumentException>(() => mesh.AddFace([v0, v1, 99]));
+        Assert.Throws<ArgumentException>(
+            () => mesh.AddFace([v0, v1], [Vector2.Zero, Vector2.One])
+        );
+        Assert.Throws<ArgumentException>(() => mesh.AddFace([v0, v1, 99], TriangleUvs));
         Assert.Equal(0, mesh.FaceCount);
         Assert.Equal(0, mesh.EdgeCount);
     }
@@ -103,10 +107,12 @@ public class SpatialMeshTests
     public void AddFace_RepeatedVertex_ThrowsAndLeavesMeshUnchanged()
     {
         using var mesh = new SpatialMesh();
-        int v0 = mesh.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = mesh.AddVertex(new Vector3(1, 0, 0), Uv);
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
 
-        var error = Assert.Throws<ArgumentException>(() => mesh.AddFace([v0, v1, v0]));
+        var error = Assert.Throws<ArgumentException>(
+            () => mesh.AddFace([v0, v1, v0], TriangleUvs)
+        );
 
         Assert.Equal("vertices", error.ParamName);
         Assert.Equal(0, mesh.FaceCount);
@@ -117,18 +123,57 @@ public class SpatialMeshTests
     public void AddFace_DisconnectedVertexFan_ThrowsAndLeavesMeshUnchanged()
     {
         using var mesh = new SpatialMesh();
-        int shared = mesh.AddVertex(new Vector3(0, 0, 0), Uv);
-        int v1 = mesh.AddVertex(new Vector3(1, 0, 0), Uv);
-        int v2 = mesh.AddVertex(new Vector3(0, 1, 0), Uv);
-        int v3 = mesh.AddVertex(new Vector3(-1, 0, 0), Uv);
-        int v4 = mesh.AddVertex(new Vector3(0, -1, 0), Uv);
-        mesh.AddFace([shared, v1, v2]);
+        int shared = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
+        int v2 = mesh.AddVertex(new Vector3(0, 1, 0));
+        int v3 = mesh.AddVertex(new Vector3(-1, 0, 0));
+        int v4 = mesh.AddVertex(new Vector3(0, -1, 0));
+        mesh.AddFace([shared, v1, v2], TriangleUvs);
 
-        var error = Assert.Throws<ArgumentException>(() => mesh.AddFace([shared, v3, v4]));
+        var error = Assert.Throws<ArgumentException>(
+            () => mesh.AddFace([shared, v3, v4], TriangleUvs)
+        );
 
         Assert.Equal("vertices", error.ParamName);
         Assert.Equal(1, mesh.FaceCount);
         Assert.Equal(3, mesh.EdgeCount);
+    }
+
+    [Fact]
+    public void AddFace_CornerUvsBelongToSourceVertices()
+    {
+        using var mesh = new SpatialMesh();
+        int v0 = mesh.AddVertex(Vector3.Zero);
+        int v1 = mesh.AddVertex(Vector3.UnitX);
+        int v2 = mesh.AddVertex(Vector3.UnitY);
+        Vector2[] uvs = [new(0, 0), new(1, 0), new(0, 1)];
+
+        int face = mesh.AddFace([v0, v1, v2], uvs);
+        int halfEdge = mesh.GetFace(face).AdjacentHalfEdge;
+        for (int i = 0; i < uvs.Length; i++)
+        {
+            Assert.Equal(uvs[i], mesh.HalfEdgeUvRef(halfEdge));
+            Assert.Equal(Vector2.Zero, mesh.HalfEdgeUvRef(halfEdge ^ 1));
+            halfEdge = mesh.GetHalfEdge(halfEdge).NextHalfEdge;
+        }
+
+    }
+
+    [Fact]
+    public void AddFace_MismatchedCornerUvsThrowAndLeaveMeshUnchanged()
+    {
+        using var mesh = new SpatialMesh();
+        int v0 = mesh.AddVertex(Vector3.Zero);
+        int v1 = mesh.AddVertex(Vector3.UnitX);
+        int v2 = mesh.AddVertex(Vector3.UnitY);
+
+        var error = Assert.Throws<ArgumentException>(
+            () => mesh.AddFace([v0, v1, v2], [Vector2.Zero, Vector2.One])
+        );
+
+        Assert.Equal("cornerUvs", error.ParamName);
+        Assert.Equal(0, mesh.FaceCount);
+        Assert.Equal(0, mesh.EdgeCount);
     }
 
     static int FindOutgoing(SpatialMesh mesh, int from, int to)
