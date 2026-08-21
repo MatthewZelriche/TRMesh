@@ -22,32 +22,33 @@ public class SpatialMeshTests
         Assert.Equal(3, mesh.EdgeCount);
         Assert.Equal(1, mesh.FaceCount);
 
-        int h0 = mesh.GetFace(face).AdjacentHalfEdge;
-        int h1 = mesh.GetHalfEdge(h0).NextHalfEdge;
-        int h2 = mesh.GetHalfEdge(h1).NextHalfEdge;
+        int h0 = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
+        int h1 = mesh.GetHalfEdgeData(h0).topology.NextHalfEdge;
+        int h2 = mesh.GetHalfEdgeData(h1).topology.NextHalfEdge;
 
-        Assert.Equal(h0, mesh.GetHalfEdge(h2).NextHalfEdge);
-        Assert.Equal(h0, mesh.GetHalfEdge(h1).PrevHalfEdge);
-        Assert.Equal(h1, mesh.GetHalfEdge(h2).PrevHalfEdge);
-        Assert.Equal(h2, mesh.GetHalfEdge(h0).PrevHalfEdge);
+        Assert.Equal(h0, mesh.GetHalfEdgeData(h2).topology.NextHalfEdge);
+        Assert.Equal(h0, mesh.GetHalfEdgeData(h1).topology.PrevHalfEdge);
+        Assert.Equal(h1, mesh.GetHalfEdgeData(h2).topology.PrevHalfEdge);
+        Assert.Equal(h2, mesh.GetHalfEdgeData(h0).topology.PrevHalfEdge);
 
-        Assert.Equal(v0, mesh.GetHalfEdge(h0).SourceVertex);
-        Assert.Equal(v1, mesh.GetHalfEdge(h1).SourceVertex);
-        Assert.Equal(v2, mesh.GetHalfEdge(h2).SourceVertex);
+        Assert.Equal(v0, mesh.GetHalfEdgeData(h0).topology.SourceVertex);
+        Assert.Equal(v1, mesh.GetHalfEdgeData(h1).topology.SourceVertex);
+        Assert.Equal(v2, mesh.GetHalfEdgeData(h2).topology.SourceVertex);
 
-        Assert.Equal(face, mesh.GetHalfEdge(h0).AdjacentFace);
-        Assert.Equal(face, mesh.GetHalfEdge(h1).AdjacentFace);
-        Assert.Equal(face, mesh.GetHalfEdge(h2).AdjacentFace);
+        Assert.Equal(face, mesh.GetHalfEdgeData(h0).topology.AdjacentFace);
+        Assert.Equal(face, mesh.GetHalfEdgeData(h1).topology.AdjacentFace);
+        Assert.Equal(face, mesh.GetHalfEdgeData(h2).topology.AdjacentFace);
 
-        int t0 = h0 ^ 1;
-        int t1 = h1 ^ 1;
-        int t2 = h2 ^ 1;
-        Assert.Equal(SpatialMesh.INVALID_HANDLE, mesh.GetHalfEdge(t0).AdjacentFace);
-        Assert.Equal(t2, mesh.GetHalfEdge(t0).NextHalfEdge);
-        Assert.Equal(t1, mesh.GetHalfEdge(t2).NextHalfEdge);
-        Assert.Equal(t0, mesh.GetHalfEdge(t1).NextHalfEdge);
+        int t0 = mesh.GetHalfEdgeData(h0).topology.TwinHalfEdge;
+        int t1 = mesh.GetHalfEdgeData(h1).topology.TwinHalfEdge;
+        int t2 = mesh.GetHalfEdgeData(h2).topology.TwinHalfEdge;
+        Assert.Equal(h0, mesh.GetHalfEdgeData(t0).topology.TwinHalfEdge);
+        Assert.Equal(SpatialMesh.INVALID_HANDLE, mesh.GetHalfEdgeData(t0).topology.AdjacentFace);
+        Assert.Equal(t2, mesh.GetHalfEdgeData(t0).topology.NextHalfEdge);
+        Assert.Equal(t1, mesh.GetHalfEdgeData(t2).topology.NextHalfEdge);
+        Assert.Equal(t0, mesh.GetHalfEdgeData(t1).topology.NextHalfEdge);
 
-        Assert.Equal(new Vector3(0, 0, 1), mesh.GetFaceNormal(face));
+        Assert.Equal(new Vector3(0, 0, 1), mesh.GetFaceData(face).normal);
     }
 
     [Fact]
@@ -67,8 +68,9 @@ public class SpatialMeshTests
 
         int shared = FindOutgoing(mesh, v2, v0);
         Assert.NotEqual(SpatialMesh.INVALID_HANDLE, shared);
-        Assert.Equal(first, mesh.GetHalfEdge(shared).AdjacentFace);
-        Assert.Equal(second, mesh.GetHalfEdge(shared ^ 1).AdjacentFace);
+        Assert.Equal(first, mesh.GetHalfEdgeData(shared).topology.AdjacentFace);
+        int twin = mesh.GetHalfEdgeData(shared).topology.TwinHalfEdge;
+        Assert.Equal(second, mesh.GetHalfEdgeData(twin).topology.AdjacentFace);
     }
 
     [Fact]
@@ -149,12 +151,13 @@ public class SpatialMeshTests
         Vector2[] uvs = [new(0, 0), new(1, 0), new(0, 1)];
 
         int face = mesh.AddFace([v0, v1, v2], uvs);
-        int halfEdge = mesh.GetFace(face).AdjacentHalfEdge;
+        int halfEdge = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
         for (int i = 0; i < uvs.Length; i++)
         {
-            Assert.Equal(uvs[i], mesh.HalfEdgeUvRef(halfEdge));
-            Assert.Equal(Vector2.Zero, mesh.HalfEdgeUvRef(halfEdge ^ 1));
-            halfEdge = mesh.GetHalfEdge(halfEdge).NextHalfEdge;
+            Assert.Equal(uvs[i], mesh.GetHalfEdgeData(halfEdge).UV);
+            int twin = mesh.GetHalfEdgeData(halfEdge).topology.TwinHalfEdge;
+            Assert.Equal(Vector2.Zero, mesh.GetHalfEdgeData(twin).UV);
+            halfEdge = mesh.GetHalfEdgeData(halfEdge).topology.NextHalfEdge;
         }
 
     }
@@ -178,13 +181,14 @@ public class SpatialMeshTests
 
     static int FindOutgoing(SpatialMesh mesh, int from, int to)
     {
-        int start = mesh.GetVertex(from).OutgoingHalfEdge;
+        int start = mesh.GetVertexData(from).topology.OutgoingHalfEdge;
         int he = start;
         do
         {
-            if (mesh.GetHalfEdge(he ^ 1).SourceVertex == to)
+            int twin = mesh.GetHalfEdgeData(he).topology.TwinHalfEdge;
+            if (mesh.GetHalfEdgeData(twin).topology.SourceVertex == to)
                 return he;
-            he = mesh.GetHalfEdge(he ^ 1).NextHalfEdge;
+            he = mesh.GetHalfEdgeData(twin).topology.NextHalfEdge;
         } while (he != start);
 
         return SpatialMesh.INVALID_HANDLE;

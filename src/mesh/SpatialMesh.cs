@@ -4,22 +4,21 @@ using System.Runtime.CompilerServices;
 namespace TRMesh.Mesh;
 
 [SoA]
-struct VertexData
+public struct VertexData
 {
     public Vertex topology;
     public Vector3 position;
 }
 
 [SoA]
-struct EdgeData
+public struct HalfEdgeData
 {
-    public Edge topology;
-    public Vector2 halfEdgeUv;
-    public Vector2 twinUv;
+    public HalfEdge topology;
+    public Vector2 UV;
 }
 
 [SoA]
-struct FaceData
+public struct FaceData
 {
     public Face topology;
     public Vector3 normal;
@@ -30,11 +29,12 @@ public partial class SpatialMesh : IDisposable
     public const int INVALID_HANDLE = -1;
 
     readonly VertexDataSoA _vertices = new();
-    readonly EdgeDataSoA _edges = new();
+    readonly HalfEdgeDataSoA _halfEdges = new();
     readonly FaceDataSoA _faces = new();
 
     public int VertexCount => _vertices.Count;
-    public int EdgeCount => _edges.Count;
+    public int HalfEdgeCount => _halfEdges.Count;
+    public int EdgeCount => _halfEdges.Count / 2;
     public int FaceCount => _faces.Count;
 
     public int AddVertex(Vector3 position)
@@ -177,7 +177,7 @@ public partial class SpatialMesh : IDisposable
             }
 
             hedges[i] = heHandle;
-            HalfEdgeUvRef(heHandle) = cornerUvs[i];
+            _halfEdges.Get(heHandle).UV = cornerUvs[i];
         }
 
         _faces.Get(faceHandle).topology.AdjacentHalfEdge = hedges[0];
@@ -201,8 +201,8 @@ public partial class SpatialMesh : IDisposable
 
             int heHandle = hedges[i];
             int heNextHandle = hedges[iNext];
-            int heTwinHandle = Twin(heHandle);
-            int heNextTwinHandle = Twin(heNextHandle);
+            int heTwinHandle = HalfEdgeRef(heHandle).TwinHalfEdge;
+            int heNextTwinHandle = HalfEdgeRef(heNextHandle).TwinHalfEdge;
 
             bool currExisted = existingHandles[i] != INVALID_HANDLE;
             bool nextExisted = existingHandles[iNext] != INVALID_HANDLE;
@@ -225,7 +225,7 @@ public partial class SpatialMesh : IDisposable
     public void Dispose()
     {
         _vertices.Dispose();
-        _edges.Dispose();
+        _halfEdges.Dispose();
         _faces.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -235,7 +235,7 @@ public partial class SpatialMesh : IDisposable
     {
         foreach (int he in new HalfEdgesAroundVertex(this, from))
         {
-            if (HalfEdgeRef(Twin(he)).SourceVertex == to)
+            if (HalfEdgeRef(HalfEdgeRef(he).TwinHalfEdge).SourceVertex == to)
                 return he;
         }
 
@@ -244,21 +244,21 @@ public partial class SpatialMesh : IDisposable
 
     int ConstructEdge(int from, int to)
     {
-        int slot = _edges.Insert();
-        int he = slot << 1;
-        int twin = Twin(he);
+        int he = _halfEdges.Insert();
+        int twin = _halfEdges.Insert();
 
-        ref Edge edge = ref _edges.Get(slot).topology;
-        edge.halfEdge = new HalfEdge
+        _halfEdges.Get(he).topology = new HalfEdge
         {
             SourceVertex = from,
+            TwinHalfEdge = twin,
             NextHalfEdge = twin,
             PrevHalfEdge = twin,
             AdjacentFace = INVALID_HANDLE,
         };
-        edge.twin = new HalfEdge
+        _halfEdges.Get(twin).topology = new HalfEdge
         {
             SourceVertex = to,
+            TwinHalfEdge = he,
             NextHalfEdge = he,
             PrevHalfEdge = he,
             AdjacentFace = INVALID_HANDLE,
@@ -276,29 +276,5 @@ public partial class SpatialMesh : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static int Twin(int halfEdge) => halfEdge ^ 1;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    ref HalfEdge HalfEdgeRef(int handle)
-    {
-        var view = _edges.Get(handle >> 1);
-        return ref Unsafe.Add(ref view.topology.halfEdge, handle & 1);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ref Vector2 HalfEdgeUvRef(int handle)
-    {
-        var view = _edges.Get(handle >> 1);
-        return ref (handle & 1) == 0 ? ref view.halfEdgeUv : ref view.twinUv;
-    }
-
-    internal ref HalfEdge GetHalfEdge(int handle) => ref HalfEdgeRef(handle);
-
-    internal ref Vertex GetVertex(int slot) => ref _vertices.Get(slot).topology;
-
-    internal ref Face GetFace(int slot) => ref _faces.Get(slot).topology;
-
-    internal Vector3 GetFaceNormal(int slot) => _faces.Get(slot).normal;
-
-    internal Vector3 GetVertexPosition(int slot) => _vertices.Get(slot).position;
+    ref HalfEdge HalfEdgeRef(int handle) => ref _halfEdges.Get(handle).topology;
 }

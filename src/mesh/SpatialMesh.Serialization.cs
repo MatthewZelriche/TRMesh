@@ -24,14 +24,14 @@ public partial class SpatialMesh
             vertexIds.Add(slot, id);
         }
 
-        var edgeSlots = new int[_edges.Count];
-        var edgeIds = new Dictionary<int, int>(_edges.Count);
-        var edgeEnumerator = _edges.GetEnumerator();
-        for (int id = 0; edgeEnumerator.MoveNext(); id++)
+        var halfEdgeSlots = new int[_halfEdges.Count];
+        var halfEdgeIds = new Dictionary<int, int>(_halfEdges.Count);
+        var halfEdgeEnumerator = _halfEdges.GetEnumerator();
+        for (int id = 0; halfEdgeEnumerator.MoveNext(); id++)
         {
-            int slot = edgeEnumerator.CurrentSlot;
-            edgeSlots[id] = slot;
-            edgeIds.Add(slot, id);
+            int slot = halfEdgeEnumerator.CurrentSlot;
+            halfEdgeSlots[id] = slot;
+            halfEdgeIds.Add(slot, id);
         }
 
         var faceSlots = new int[_faces.Count];
@@ -55,9 +55,9 @@ public partial class SpatialMesh
             {
                 topology = new Vertex
                 {
-                    OutgoingHalfEdge = RemapHalfEdge(
+                    OutgoingHalfEdge = RemapHandle(
                         source.topology.OutgoingHalfEdge,
-                        edgeIds,
+                        halfEdgeIds,
                         allowInvalid: true
                     ),
                 },
@@ -65,29 +65,19 @@ public partial class SpatialMesh
             };
         }
 
-        var edges = new EdgeData[edgeSlots.Length];
-        for (int id = 0; id < edgeSlots.Length; id++)
+        var halfEdges = new HalfEdgeData[halfEdgeSlots.Length];
+        for (int id = 0; id < halfEdgeSlots.Length; id++)
         {
-            var source = _edges.Get(edgeSlots[id]);
-            edges[id] = new EdgeData
+            var source = _halfEdges.Get(halfEdgeSlots[id]);
+            halfEdges[id] = new HalfEdgeData
             {
-                topology = new Edge
-                {
-                    halfEdge = RemapHalfEdgeRecord(
-                        source.topology.halfEdge,
-                        vertexIds,
-                        edgeIds,
-                        faceIds
-                    ),
-                    twin = RemapHalfEdgeRecord(
-                        source.topology.twin,
-                        vertexIds,
-                        edgeIds,
-                        faceIds
-                    ),
-                },
-                halfEdgeUv = source.halfEdgeUv,
-                twinUv = source.twinUv,
+                topology = RemapHalfEdgeRecord(
+                    source.topology,
+                    vertexIds,
+                    halfEdgeIds,
+                    faceIds
+                ),
+                UV = source.UV,
             };
         }
 
@@ -99,9 +89,9 @@ public partial class SpatialMesh
             {
                 topology = new Face
                 {
-                    AdjacentHalfEdge = RemapHalfEdge(
+                    AdjacentHalfEdge = RemapHandle(
                         source.topology.AdjacentHalfEdge,
-                        edgeIds,
+                        halfEdgeIds,
                         allowInvalid: false
                     ),
                 },
@@ -114,7 +104,7 @@ public partial class SpatialMesh
         writer.Write(BinaryMagic);
         writer.Write(BinaryVersion);
         writer.Write(vertices.Length);
-        writer.Write(edges.Length);
+        writer.Write(halfEdges.Length);
         writer.Write(faces.Length);
 
         foreach (VertexData vertex in vertices)
@@ -125,11 +115,8 @@ public partial class SpatialMesh
             writer.Write(vertex.position.Z);
         }
 
-        foreach (EdgeData edge in edges)
-        {
-            WriteHalfEdge(writer, edge.topology.halfEdge, edge.halfEdgeUv);
-            WriteHalfEdge(writer, edge.topology.twin, edge.twinUv);
-        }
+        foreach (HalfEdgeData halfEdge in halfEdges)
+            WriteHalfEdge(writer, halfEdge.topology, halfEdge.UV);
 
         foreach (FaceData face in faces)
         {
@@ -155,7 +142,7 @@ public partial class SpatialMesh
             throw new InvalidDataException($"Unsupported SpatialMesh snapshot version {version}.");
 
         int vertexCount = ReadCount(reader, "vertex");
-        int edgeCount = ReadCount(reader, "edge");
+        int halfEdgeCount = ReadCount(reader, "half-edge");
         int faceCount = ReadCount(reader, "face");
 
         var mesh = new SpatialMesh();
@@ -183,13 +170,13 @@ public partial class SpatialMesh
                     throw new InvalidOperationException("Vertex records were not allocated densely.");
             }
 
-            for (int i = 0; i < edgeCount; i++)
+            for (int i = 0; i < halfEdgeCount; i++)
             {
-                int slot = mesh._edges.Insert(
-                    ReadEdgeData(reader)
-                );
+                int slot = mesh._halfEdges.Insert(ReadHalfEdgeData(reader));
                 if (slot != i)
-                    throw new InvalidOperationException("Edge records were not allocated densely.");
+                    throw new InvalidOperationException(
+                        "Half-edge records were not allocated densely."
+                    );
             }
 
             for (int i = 0; i < faceCount; i++)
@@ -222,7 +209,7 @@ public partial class SpatialMesh
     static HalfEdge RemapHalfEdgeRecord(
         HalfEdge source,
         Dictionary<int, int> vertexIds,
-        Dictionary<int, int> edgeIds,
+        Dictionary<int, int> halfEdgeIds,
         Dictionary<int, int> faceIds
     ) =>
         new()
@@ -232,14 +219,19 @@ public partial class SpatialMesh
                 vertexIds,
                 allowInvalid: false
             ),
-            NextHalfEdge = RemapHalfEdge(
-                source.NextHalfEdge,
-                edgeIds,
+            TwinHalfEdge = RemapHandle(
+                source.TwinHalfEdge,
+                halfEdgeIds,
                 allowInvalid: false
             ),
-            PrevHalfEdge = RemapHalfEdge(
+            NextHalfEdge = RemapHandle(
+                source.NextHalfEdge,
+                halfEdgeIds,
+                allowInvalid: false
+            ),
+            PrevHalfEdge = RemapHandle(
                 source.PrevHalfEdge,
-                edgeIds,
+                halfEdgeIds,
                 allowInvalid: false
             ),
             AdjacentFace = RemapHandle(
@@ -248,14 +240,6 @@ public partial class SpatialMesh
                 allowInvalid: true
             ),
         };
-
-    static int RemapHalfEdge(int handle, Dictionary<int, int> edgeIds, bool allowInvalid)
-    {
-        if (handle == INVALID_HANDLE && allowInvalid)
-            return INVALID_HANDLE;
-        int edgeId = RemapHandle(handle >> 1, edgeIds, allowInvalid: false);
-        return (edgeId << 1) | (handle & 1);
-    }
 
     static int RemapHandle(int handle, Dictionary<int, int> ids, bool allowInvalid)
     {
@@ -273,6 +257,7 @@ public partial class SpatialMesh
     )
     {
         writer.Write(halfEdge.SourceVertex);
+        writer.Write(halfEdge.TwinHalfEdge);
         writer.Write(halfEdge.NextHalfEdge);
         writer.Write(halfEdge.PrevHalfEdge);
         writer.Write(halfEdge.AdjacentFace);
@@ -280,24 +265,18 @@ public partial class SpatialMesh
         writer.Write(uv.Y);
     }
 
-    static EdgeData ReadEdgeData(BinaryReader reader)
-    {
-        HalfEdge halfEdge = ReadHalfEdge(reader);
-        var halfEdgeUv = new System.Numerics.Vector2(reader.ReadSingle(), reader.ReadSingle());
-        HalfEdge twin = ReadHalfEdge(reader);
-        var twinUv = new System.Numerics.Vector2(reader.ReadSingle(), reader.ReadSingle());
-        return new EdgeData
+    static HalfEdgeData ReadHalfEdgeData(BinaryReader reader) =>
+        new()
         {
-            topology = new Edge { halfEdge = halfEdge, twin = twin },
-            halfEdgeUv = halfEdgeUv,
-            twinUv = twinUv,
+            topology = ReadHalfEdge(reader),
+            UV = new System.Numerics.Vector2(reader.ReadSingle(), reader.ReadSingle()),
         };
-    }
 
     static HalfEdge ReadHalfEdge(BinaryReader reader) =>
         new()
         {
             SourceVertex = reader.ReadInt32(),
+            TwinHalfEdge = reader.ReadInt32(),
             NextHalfEdge = reader.ReadInt32(),
             PrevHalfEdge = reader.ReadInt32(),
             AdjacentFace = reader.ReadInt32(),
@@ -315,7 +294,7 @@ public partial class SpatialMesh
     void ValidateDeserializedTopology()
     {
         int vertexCount = _vertices.Count;
-        int halfEdgeCount = checked(_edges.Count * 2);
+        int halfEdgeCount = _halfEdges.Count;
         int faceCount = _faces.Count;
         var vertexDegrees = new int[vertexCount];
 
@@ -331,6 +310,8 @@ public partial class SpatialMesh
             ref HalfEdge topology = ref HalfEdgeRef(halfEdge);
             if (!IsHandleInRange(topology.SourceVertex, vertexCount))
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range source vertex.");
+            if (!IsHandleInRange(topology.TwinHalfEdge, halfEdgeCount))
+                InvalidTopology($"Half-edge {halfEdge} has an out-of-range twin half-edge.");
             if (!IsHandleInRange(topology.NextHalfEdge, halfEdgeCount))
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range next half-edge.");
             if (!IsHandleInRange(topology.PrevHalfEdge, halfEdgeCount))
@@ -355,13 +336,17 @@ public partial class SpatialMesh
         for (int halfEdge = 0; halfEdge < halfEdgeCount; halfEdge++)
         {
             ref HalfEdge topology = ref HalfEdgeRef(halfEdge);
+            if (topology.TwinHalfEdge == halfEdge)
+                InvalidTopology($"Half-edge {halfEdge} is its own twin.");
+            if (HalfEdgeRef(topology.TwinHalfEdge).TwinHalfEdge != halfEdge)
+                InvalidTopology($"Half-edge {halfEdge} has a non-reciprocal twin link.");
             if (HalfEdgeRef(topology.NextHalfEdge).PrevHalfEdge != halfEdge)
                 InvalidTopology($"Half-edge {halfEdge} has a non-reciprocal next link.");
             if (HalfEdgeRef(topology.PrevHalfEdge).NextHalfEdge != halfEdge)
                 InvalidTopology($"Half-edge {halfEdge} has a non-reciprocal previous link.");
             if (
                 HalfEdgeRef(topology.NextHalfEdge).SourceVertex
-                != HalfEdgeRef(Twin(halfEdge)).SourceVertex
+                != HalfEdgeRef(topology.TwinHalfEdge).SourceVertex
             )
             {
                 InvalidTopology($"Half-edge {halfEdge} does not continue from its target vertex.");
@@ -370,15 +355,15 @@ public partial class SpatialMesh
                 InvalidTopology($"Half-edge {halfEdge} crosses an adjacent-face boundary.");
         }
 
-        for (int edge = 0; edge < _edges.Count; edge++)
+        for (int halfEdge = 0; halfEdge < halfEdgeCount; halfEdge++)
         {
-            Edge topology = _edges.Get(edge).topology;
+            ref HalfEdge topology = ref HalfEdgeRef(halfEdge);
             if (
-                topology.halfEdge.AdjacentFace == INVALID_HANDLE
-                && topology.twin.AdjacentFace == INVALID_HANDLE
+                topology.AdjacentFace == INVALID_HANDLE
+                && HalfEdgeRef(topology.TwinHalfEdge).AdjacentFace == INVALID_HANDLE
             )
             {
-                InvalidTopology($"Edge {edge} is not adjacent to any face.");
+                InvalidTopology($"Half-edge {halfEdge} and its twin are not adjacent to any face.");
             }
         }
 
@@ -403,7 +388,7 @@ public partial class SpatialMesh
                     InvalidTopology($"Vertex {vertex} has an invalid or disconnected half-edge fan.");
                 vertexVisited[current] = true;
                 visitedCount++;
-                current = HalfEdgeRef(Twin(current)).NextHalfEdge;
+                current = HalfEdgeRef(HalfEdgeRef(current).TwinHalfEdge).NextHalfEdge;
             } while (current != outgoing && visitedCount <= vertexDegrees[vertex]);
 
             if (current != outgoing || visitedCount != vertexDegrees[vertex])

@@ -24,8 +24,8 @@ public class SpatialMeshBuilderTests
         Assert.Equal(8, mesh.VertexCount);
         Assert.Equal(12, mesh.EdgeCount);
         Assert.Equal(6, mesh.FaceCount);
-        Assert.Equal(position, mesh.GetVertexPosition(0));
-        Assert.Equal(position + size, mesh.GetVertexPosition(6));
+        Assert.Equal(position, mesh.GetVertexData(0).position);
+        Assert.Equal(position + size, mesh.GetVertexData(6).position);
         Assert.Equal(
             [
                 -Vector3.UnitY,
@@ -35,7 +35,7 @@ public class SpatialMeshBuilderTests
                 -Vector3.UnitX,
                 Vector3.UnitY,
             ],
-            Enumerable.Range(0, mesh.FaceCount).Select(mesh.GetFaceNormal)
+            Enumerable.Range(0, mesh.FaceCount).Select(face => mesh.GetFaceData(face).normal)
         );
 
         for (int face = 0; face < mesh.FaceCount; face++)
@@ -58,14 +58,20 @@ public class SpatialMeshBuilderTests
         Assert.Equal(2 * sides, mesh.VertexCount);
         Assert.Equal(3 * sides, mesh.EdgeCount);
         Assert.Equal(sides + 2, mesh.FaceCount);
-        AssertVectorApproximately(new Vector3(radius, -height / 2f, 0f), mesh.GetVertexPosition(0));
-        AssertVectorApproximately(new Vector3(radius, height / 2f, 0f), mesh.GetVertexPosition(1));
-        AssertVectorApproximately(-Vector3.UnitY, mesh.GetFaceNormal(0));
-        AssertVectorApproximately(Vector3.UnitY, mesh.GetFaceNormal(sides + 1));
+        AssertVectorApproximately(
+            new Vector3(radius, -height / 2f, 0f),
+            mesh.GetVertexData(0).position
+        );
+        AssertVectorApproximately(
+            new Vector3(radius, height / 2f, 0f),
+            mesh.GetVertexData(1).position
+        );
+        AssertVectorApproximately(-Vector3.UnitY, mesh.GetFaceData(0).normal);
+        AssertVectorApproximately(Vector3.UnitY, mesh.GetFaceData(sides + 1).normal);
 
         for (int i = 0; i < sides; i++)
         {
-            Vector3 normal = mesh.GetFaceNormal(i + 1);
+            Vector3 normal = mesh.GetFaceData(i + 1).normal;
             Assert.InRange(MathF.Abs(normal.Y), 0f, 0.00001f);
             Assert.InRange(normal.Length(), 0.99999f, 1.00001f);
 
@@ -126,20 +132,25 @@ public class SpatialMeshBuilderTests
     static Vector2[] GetFaceUvs(SpatialMesh mesh, int face)
     {
         var result = new List<Vector2>();
-        int start = mesh.GetFace(face).AdjacentHalfEdge;
+        int start = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
         int halfEdge = start;
         do
         {
-            result.Add(mesh.HalfEdgeUvRef(halfEdge));
-            halfEdge = mesh.GetHalfEdge(halfEdge).NextHalfEdge;
+            result.Add(mesh.GetHalfEdgeData(halfEdge).UV);
+            halfEdge = mesh.GetHalfEdgeData(halfEdge).topology.NextHalfEdge;
         } while (halfEdge != start);
         return [.. result];
     }
 
     static void AssertClosed(SpatialMesh mesh)
     {
-        for (int halfEdge = 0; halfEdge < mesh.EdgeCount * 2; halfEdge++)
-            Assert.NotEqual(SpatialMesh.INVALID_HANDLE, mesh.GetHalfEdge(halfEdge).AdjacentFace);
+        foreach (HalfEdgeDataSoA.ReadOnlyView halfEdge in mesh.HalfEdges)
+        {
+            Assert.NotEqual(
+                SpatialMesh.INVALID_HANDLE,
+                halfEdge.topology.AdjacentFace
+            );
+        }
     }
 
     static void AssertVectorApproximately(Vector3 expected, Vector3 actual)

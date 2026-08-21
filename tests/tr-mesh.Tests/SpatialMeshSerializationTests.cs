@@ -56,7 +56,7 @@ public class SpatialMeshSerializationTests
         Assert.Equal(0x4D535254u, reader.ReadUInt32());
         Assert.Equal(1, reader.ReadInt32());
         Assert.Equal(3, reader.ReadInt32());
-        Assert.Equal(3, reader.ReadInt32());
+        Assert.Equal(6, reader.ReadInt32());
         Assert.Equal(1, reader.ReadInt32());
 
         Assert.Equal(0, reader.ReadInt32());
@@ -66,19 +66,21 @@ public class SpatialMeshSerializationTests
 
         stream.Position = 20 + (3 * 16);
         Assert.Equal(0, reader.ReadInt32());
+        Assert.Equal(1, reader.ReadInt32());
         Assert.Equal(2, reader.ReadInt32());
         Assert.Equal(4, reader.ReadInt32());
         Assert.Equal(0, reader.ReadInt32());
         Assert.Equal(Uv.X, reader.ReadSingle());
         Assert.Equal(Uv.Y, reader.ReadSingle());
         Assert.Equal(1, reader.ReadInt32());
+        Assert.Equal(0, reader.ReadInt32());
         Assert.Equal(5, reader.ReadInt32());
         Assert.Equal(3, reader.ReadInt32());
         Assert.Equal(SpatialMesh.INVALID_HANDLE, reader.ReadInt32());
         Assert.Equal(0f, reader.ReadSingle());
         Assert.Equal(0f, reader.ReadSingle());
 
-        stream.Position = 20 + (3 * 16) + (3 * 48);
+        stream.Position = 20 + (3 * 16) + (6 * 28);
         Assert.Equal(0, reader.ReadInt32());
         Assert.Equal(0f, reader.ReadSingle());
         Assert.Equal(0f, reader.ReadSingle());
@@ -125,15 +127,15 @@ public class SpatialMeshSerializationTests
         Assert.Equal(5, loaded.EdgeCount);
         Assert.Equal(2, loaded.FaceCount);
         Assert.Equal(expected, Serialize(loaded));
-        Assert.Equal(new Vector3(0, 0, 1), loaded.GetFaceNormal(0));
-        Assert.Equal(new Vector3(0, 0, -1), loaded.GetFaceNormal(1));
+        Assert.Equal(new Vector3(0, 0, 1), loaded.GetFaceData(0).normal);
+        Assert.Equal(new Vector3(0, 0, -1), loaded.GetFaceData(1).normal);
 
-        int firstStart = loaded.GetFace(0).AdjacentHalfEdge;
-        Assert.Equal(0, loaded.GetHalfEdge(firstStart).AdjacentFace);
-        Assert.Equal(Uv, loaded.HalfEdgeUvRef(firstStart));
-        int secondStart = loaded.GetFace(1).AdjacentHalfEdge;
-        Assert.Equal(1, loaded.GetHalfEdge(secondStart).AdjacentFace);
-        Assert.Equal(new Vector2(0.5f), loaded.HalfEdgeUvRef(secondStart));
+        int firstStart = loaded.GetFaceData(0).topology.AdjacentHalfEdge;
+        Assert.Equal(0, loaded.GetHalfEdgeData(firstStart).topology.AdjacentFace);
+        Assert.Equal(Uv, loaded.GetHalfEdgeData(firstStart).UV);
+        int secondStart = loaded.GetFaceData(1).topology.AdjacentHalfEdge;
+        Assert.Equal(1, loaded.GetHalfEdgeData(secondStart).topology.AdjacentFace);
+        Assert.Equal(new Vector2(0.5f), loaded.GetHalfEdgeData(secondStart).UV);
     }
 
     [Fact]
@@ -144,14 +146,13 @@ public class SpatialMeshSerializationTests
         AddTriangle(source, new Vector3(10, 0, 0));
 
         VertexDataSoA vertices = GetStorage<VertexDataSoA>(source, "_vertices");
-        EdgeDataSoA edges = GetStorage<EdgeDataSoA>(source, "_edges");
+        HalfEdgeDataSoA halfEdges = GetStorage<HalfEdgeDataSoA>(source, "_halfEdges");
         FaceDataSoA faces = GetStorage<FaceDataSoA>(source, "_faces");
         vertices.RemoveAt(0);
         vertices.RemoveAt(1);
         vertices.RemoveAt(2);
-        edges.RemoveAt(0);
-        edges.RemoveAt(1);
-        edges.RemoveAt(2);
+        for (int halfEdge = 0; halfEdge < 6; halfEdge++)
+            halfEdges.RemoveAt(halfEdge);
         faces.RemoveAt(0);
 
         byte[] compact = Serialize(source);
@@ -162,10 +163,11 @@ public class SpatialMeshSerializationTests
         Assert.Equal(1, loaded.FaceCount);
         Assert.Equal(compact, Serialize(loaded));
 
-        for (int halfEdge = 0; halfEdge < loaded.EdgeCount * 2; halfEdge++)
+        for (int halfEdge = 0; halfEdge < loaded.HalfEdgeCount; halfEdge++)
         {
-            ref HalfEdge topology = ref loaded.GetHalfEdge(halfEdge);
+            HalfEdge topology = loaded.GetHalfEdgeData(halfEdge).topology;
             Assert.InRange(topology.SourceVertex, 0, 2);
+            Assert.InRange(topology.TwinHalfEdge, 0, 5);
             Assert.InRange(topology.NextHalfEdge, 0, 5);
             Assert.InRange(topology.PrevHalfEdge, 0, 5);
             Assert.True(topology.AdjacentFace is -1 or 0);

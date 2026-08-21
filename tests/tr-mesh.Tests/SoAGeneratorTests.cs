@@ -102,6 +102,33 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
+    public void ReadOnlyViewAndEnumerator_ExposeGeneratedFieldsAndStableSlots()
+    {
+        using var soa = new TestEntitySoA();
+        int first = soa.Insert(new TestEntity { Id = 1, Health = 2f, Flags = 3 });
+        int removed = soa.Insert(new TestEntity { Id = 4, Health = 5f, Flags = 6 });
+        int third = soa.Insert(new TestEntity { Id = 7, Health = 8f, Flags = 9 });
+        soa.RemoveAt(removed);
+
+        TestEntitySoA.ReadOnlyView firstView = soa.GetReadOnly(first);
+        Assert.Equal(first, firstView.Slot);
+        Assert.Equal(1, firstView.Id);
+        Assert.Equal(2f, firstView.Health);
+        Assert.Equal(3, firstView.Flags);
+
+        var slots = new List<int>();
+        var ids = new List<int>();
+        foreach (TestEntitySoA.ReadOnlyView view in soa.AsReadOnly())
+        {
+            slots.Add(view.Slot);
+            ids.Add(view.Id);
+        }
+
+        Assert.Equal([first, third], slots);
+        Assert.Equal([1, 7], ids);
+    }
+
+    [Fact]
     public void Clear_ResetsCount()
     {
         using var soa = new TestEntitySoA();

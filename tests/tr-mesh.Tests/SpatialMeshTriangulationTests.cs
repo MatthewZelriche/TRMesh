@@ -30,9 +30,9 @@ public class SpatialMeshTriangulationTests
         Assert.Equal(4, output.Count);
         Assert.Equal(99, output[0]);
 
-        int h0 = mesh.GetFace(face).AdjacentHalfEdge;
-        int h1 = mesh.GetHalfEdge(h0).NextHalfEdge;
-        int h2 = mesh.GetHalfEdge(h1).NextHalfEdge;
+        int h0 = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
+        int h1 = mesh.GetHalfEdgeData(h0).topology.NextHalfEdge;
+        int h2 = mesh.GetHalfEdgeData(h1).topology.NextHalfEdge;
         Assert.Equal([99, h0, h1, h2], output);
         AssertTriangleWinding(mesh, output, Vector3.UnitZ, skip: 1);
     }
@@ -51,10 +51,10 @@ public class SpatialMeshTriangulationTests
         Assert.True(mesh.TriangulateFace(face, output));
         Assert.Equal(6, output.Count);
 
-        int h0 = mesh.GetFace(face).AdjacentHalfEdge;
-        int h1 = mesh.GetHalfEdge(h0).NextHalfEdge;
-        int h2 = mesh.GetHalfEdge(h1).NextHalfEdge;
-        int h3 = mesh.GetHalfEdge(h2).NextHalfEdge;
+        int h0 = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
+        int h1 = mesh.GetHalfEdgeData(h0).topology.NextHalfEdge;
+        int h2 = mesh.GetHalfEdgeData(h1).topology.NextHalfEdge;
+        int h3 = mesh.GetHalfEdgeData(h2).topology.NextHalfEdge;
         Assert.Equal([h0, h1, h2, h0, h2, h3], output);
         AssertTriangleWinding(mesh, output, Vector3.UnitZ);
         AssertAreaMatches(mesh, face, output);
@@ -78,11 +78,11 @@ public class SpatialMeshTriangulationTests
         AssertTriangleWinding(mesh, output, Vector3.UnitZ);
         AssertAreaMatches(mesh, face, output);
 
-        int h0 = mesh.GetFace(face).AdjacentHalfEdge;
-        int h1 = mesh.GetHalfEdge(h0).NextHalfEdge;
-        int h2 = mesh.GetHalfEdge(h1).NextHalfEdge;
-        int h3 = mesh.GetHalfEdge(h2).NextHalfEdge;
-        int h4 = mesh.GetHalfEdge(h3).NextHalfEdge;
+        int h0 = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
+        int h1 = mesh.GetHalfEdgeData(h0).topology.NextHalfEdge;
+        int h2 = mesh.GetHalfEdgeData(h1).topology.NextHalfEdge;
+        int h3 = mesh.GetHalfEdgeData(h2).topology.NextHalfEdge;
+        int h4 = mesh.GetHalfEdgeData(h3).topology.NextHalfEdge;
         Assert.False(output.SequenceEqual([h0, h1, h2, h0, h2, h3, h0, h3, h4]));
     }
 
@@ -99,7 +99,7 @@ public class SpatialMeshTriangulationTests
         var output = new List<int>();
         Assert.True(mesh.TriangulateFace(face, output));
         Assert.Equal(6, output.Count);
-        AssertTriangleWinding(mesh, output, mesh.GetFaceNormal(face));
+        AssertTriangleWinding(mesh, output, mesh.GetFaceData(face).normal);
         AssertAreaMatches(mesh, face, output);
     }
 
@@ -113,7 +113,7 @@ public class SpatialMeshTriangulationTests
             output.Clear();
             Assert.True(mesh.TriangulateFace(face, output));
             Assert.Equal(6, output.Count);
-            AssertTriangleWinding(mesh, output, mesh.GetFaceNormal(face));
+            AssertTriangleWinding(mesh, output, mesh.GetFaceData(face).normal);
             AssertAreaMatches(mesh, face, output);
         }
     }
@@ -130,13 +130,13 @@ public class SpatialMeshTriangulationTests
         var output = new List<int>();
         Assert.True(mesh.TriangulateFace(bottom, output));
         Assert.Equal(3 * (sides - 2), output.Count);
-        AssertTriangleWinding(mesh, output, mesh.GetFaceNormal(bottom));
+        AssertTriangleWinding(mesh, output, mesh.GetFaceData(bottom).normal);
         AssertAreaMatches(mesh, bottom, output);
 
         output.Clear();
         Assert.True(mesh.TriangulateFace(top, output));
         Assert.Equal(3 * (sides - 2), output.Count);
-        AssertTriangleWinding(mesh, output, mesh.GetFaceNormal(top));
+        AssertTriangleWinding(mesh, output, mesh.GetFaceData(top).normal);
         AssertAreaMatches(mesh, top, output);
     }
 
@@ -211,6 +211,73 @@ public class SpatialMeshTriangulationTests
         }
     }
 
+    [Fact]
+    public void PublicFaceAndCornerAccessors_ExposeTriangulationAttributes()
+    {
+        using var mesh = new SpatialMesh();
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
+        int v2 = mesh.AddVertex(new Vector3(0, 1, 0));
+        int face = mesh.AddFace([v0, v1, v2], TriangleUvs);
+
+        var vertexHandles = new List<int>();
+        foreach (VertexDataSoA.ReadOnlyView vertex in mesh.Vertices)
+        {
+            vertexHandles.Add(vertex.Slot);
+            Assert.Equal(mesh.GetVertexData(vertex.Slot).position, vertex.position);
+            Assert.Equal(
+                mesh.GetVertexData(vertex.Slot).topology.OutgoingHalfEdge,
+                vertex.topology.OutgoingHalfEdge
+            );
+        }
+        Assert.Equal([v0, v1, v2], vertexHandles);
+
+        var halfEdgeHandles = new List<int>();
+        foreach (HalfEdgeDataSoA.ReadOnlyView halfEdge in mesh.HalfEdges)
+        {
+            halfEdgeHandles.Add(halfEdge.Slot);
+            HalfEdgeDataSoA.ReadOnlyView lookup = mesh.GetHalfEdgeData(halfEdge.Slot);
+            Assert.Equal(lookup.topology, halfEdge.topology);
+            Assert.Equal(lookup.UV, halfEdge.UV);
+        }
+        Assert.Equal([0, 1, 2, 3, 4, 5], halfEdgeHandles);
+
+        var faceHandles = new List<int>();
+        foreach (FaceDataSoA.ReadOnlyView liveFace in mesh.Faces)
+        {
+            faceHandles.Add(liveFace.Slot);
+            Assert.Equal(mesh.GetFaceData(liveFace.Slot).normal, liveFace.normal);
+            Assert.Equal(
+                mesh.GetFaceData(liveFace.Slot).topology.AdjacentHalfEdge,
+                liveFace.topology.AdjacentHalfEdge
+            );
+        }
+        Assert.Equal([face], faceHandles);
+
+        var corners = new List<int>();
+        Assert.True(mesh.TriangulateFace(face, corners));
+        Assert.Equal(Vector3.UnitZ, mesh.GetFaceData(face).normal);
+        Assert.Equal(v0, mesh.GetHalfEdgeData(corners[0]).topology.SourceVertex);
+        Assert.Equal(v1, mesh.GetHalfEdgeData(corners[1]).topology.SourceVertex);
+        Assert.Equal(v2, mesh.GetHalfEdgeData(corners[2]).topology.SourceVertex);
+        Assert.Equal(Vector3.Zero, mesh.GetVertexData(v0).position);
+        Assert.Equal(Vector3.UnitX, mesh.GetVertexData(v1).position);
+        Assert.Equal(Vector3.UnitY, mesh.GetVertexData(v2).position);
+        Assert.Equal(TriangleUvs[0], mesh.GetHalfEdgeData(corners[0]).UV);
+        Assert.Equal(TriangleUvs[1], mesh.GetHalfEdgeData(corners[1]).UV);
+        Assert.Equal(TriangleUvs[2], mesh.GetHalfEdgeData(corners[2]).UV);
+    }
+
+    [Fact]
+    public void PublicFaceAndCornerAccessors_RejectInvalidHandles()
+    {
+        using var mesh = new SpatialMesh();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => mesh.GetFaceData(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => mesh.GetVertexData(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => mesh.GetHalfEdgeData(0));
+    }
+
     static void AssertTriangleWinding(
         SpatialMesh mesh,
         List<int> triangles,
@@ -233,7 +300,7 @@ public class SpatialMeshTriangulationTests
     static void AssertAreaMatches(SpatialMesh mesh, int face, List<int> triangles)
     {
         Vector3[] positions = FacePositions(mesh, face);
-        Vector3 normal = mesh.GetFaceNormal(face);
+        Vector3 normal = mesh.GetFaceData(face).normal;
         float expected = PolygonArea(positions, normal);
         float actual = TriangleListArea(mesh, triangles, normal);
         Assert.InRange(actual, expected - 0.0001f, expected + 0.0001f);
@@ -279,19 +346,19 @@ public class SpatialMeshTriangulationTests
     static Vector3[] FacePositions(SpatialMesh mesh, int face)
     {
         var positions = new List<Vector3>();
-        int start = mesh.GetFace(face).AdjacentHalfEdge;
+        int start = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
         int he = start;
         do
         {
             positions.Add(CornerPosition(mesh, he));
-            he = mesh.GetHalfEdge(he).NextHalfEdge;
+            he = mesh.GetHalfEdgeData(he).topology.NextHalfEdge;
         } while (he != start);
         return [.. positions];
     }
 
     static Vector3 CornerPosition(SpatialMesh mesh, int halfEdge)
     {
-        int vertex = mesh.GetHalfEdge(halfEdge).SourceVertex;
-        return mesh.GetVertexPosition(vertex);
+        int vertex = mesh.GetHalfEdgeData(halfEdge).topology.SourceVertex;
+        return mesh.GetVertexData(vertex).position;
     }
 }
