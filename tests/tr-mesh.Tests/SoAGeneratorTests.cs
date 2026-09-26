@@ -160,16 +160,16 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
-    public void View_RemainsValidAcrossParallelStorageGrowth()
+    public void DenseColumns_PreserveValuesAcrossStorageGrowth()
     {
         using var soa = new TestEntitySoA();
         var slot = soa.Insert(new TestEntity { Id = 1, Health = 1f, Flags = 1 });
-        var view = soa.Get(slot);
 
-        // Cross several UnsafeChunkedList growth boundaries while retaining the view.
+        // Cross several UnsafeList reallocations in every dense column.
         for (var i = 2; i <= 300; i++)
             soa.Insert(new TestEntity { Id = i, Health = i, Flags = (byte)i });
 
+        var view = soa.Get(slot);
         view.Health = 123f;
         view.Flags = 45;
 
@@ -335,17 +335,34 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
-    public void TargetedDerivedSoA_HasNoSecondColony()
+    public void GeneratedSoA_UsesOneRootSlotMapAndNoColonies()
     {
-        var baseOwnsColony = typeof(TargetMesh)
+        var baseOwnsSlotMap = typeof(TargetMesh)
             .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-            .Any(IsUnsafeColonyField);
-        var derivedOwnsColony = typeof(TargetSpatialMesh)
+            .Any(IsUnsafeSlotMapField);
+        var derivedOwnsSlotMap = typeof(TargetSpatialMesh)
             .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-            .Any(IsUnsafeColonyField);
+            .Any(IsUnsafeSlotMapField);
+        var generatedFields = new[]
+        {
+            typeof(TestEntitySoA),
+            typeof(TargetMesh),
+            typeof(TargetSpatialMesh),
+        }
+            .SelectMany(type =>
+                type.GetFields(
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly
+                )
+            )
+            .ToArray();
 
-        Assert.True(baseOwnsColony);
-        Assert.False(derivedOwnsColony);
+        Assert.True(baseOwnsSlotMap);
+        Assert.False(derivedOwnsSlotMap);
+        Assert.DoesNotContain(generatedFields, IsUnsafeColonyField);
+        Assert.All(
+            generatedFields.Where(field => !IsUnsafeSlotMapField(field)),
+            field => Assert.True(IsUnsafeListField(field))
+        );
     }
 
     static List<int> EnumerateIds(TestEntitySoA soa)
@@ -359,4 +376,12 @@ public unsafe class SoAGeneratorTests
     static bool IsUnsafeColonyField(FieldInfo field) =>
         field.FieldType.IsGenericType
         && field.FieldType.GetGenericTypeDefinition() == typeof(UnsafeColony<>);
+
+    static bool IsUnsafeSlotMapField(FieldInfo field) =>
+        field.FieldType.IsGenericType
+        && field.FieldType.GetGenericTypeDefinition() == typeof(UnsafeSlotMap<>);
+
+    static bool IsUnsafeListField(FieldInfo field) =>
+        field.FieldType.IsGenericType
+        && field.FieldType.GetGenericTypeDefinition() == typeof(UnsafeList<>);
 }

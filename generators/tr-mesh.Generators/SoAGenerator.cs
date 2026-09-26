@@ -129,7 +129,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
                             && f.Type is not IFunctionPointerTypeSymbol
                             && !f.IsFixedSizeBuffer
                             && f.RefKind == RefKind.None,
-                        IsColony: index == 0
+                        IsMaster: index == 0
                     )
             )
             .ToImmutableArray();
@@ -506,9 +506,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
         {
             sb.Append("    private ");
             if (isRoot && ReferenceEquals(field, rootAnchor))
-                sb.Append("UnsafeColony<");
+                sb.Append("UnsafeSlotMap<");
             else
-                sb.Append("UnsafeChunkedList<");
+                sb.Append("UnsafeList<");
             sb.Append(field.Field.TypeDisplay)
                 .Append("> ")
                 .Append(field.StorageName)
@@ -522,10 +522,19 @@ public sealed class SoAGenerator : IIncrementalGenerator
             sb.Append("    protected ref ")
                 .Append(field.Field.TypeDisplay)
                 .Append(' ')
-                .Append(field.AccessorName)
-                .Append("(int slot) => ref ")
-                .Append(field.StorageName)
-                .AppendLine("[slot];");
+                .Append(field.AccessorName);
+            if (isRoot && ReferenceEquals(field, rootAnchor))
+            {
+                sb.Append("(int slot, out int denseIndex) => ref ")
+                    .Append(field.StorageName)
+                    .AppendLine(".UnsafeRef(slot, out denseIndex);");
+            }
+            else
+            {
+                sb.Append("(int denseIndex) => ref ")
+                    .Append(field.StorageName)
+                    .AppendLine("[denseIndex];");
+            }
             sb.AppendLine();
         }
 
@@ -534,7 +543,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         else
             AppendDerivedTargetMembers(sb, target, parameterNames);
 
-        AppendTargetView(sb, target, allFields, viewName, isRoot);
+        AppendTargetView(sb, target, rootAnchor, allFields, viewName, isRoot);
         AppendTargetEnumerator(sb, target, rootAnchor, viewName, isRoot);
 
         sb.AppendLine("}");
@@ -558,7 +567,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("    public bool IsAlive(int slot) => ")
             .Append(rootAnchor.StorageName)
-            .AppendLine(".IsActive(slot);");
+            .AppendLine(".Contains(slot);");
         sb.AppendLine();
 
         AppendDefaultInsert(sb, target.Components, isDerived: false);
@@ -575,28 +584,53 @@ public sealed class SoAGenerator : IIncrementalGenerator
                 continue;
             sb.Append("        ")
                 .Append(field.StorageName)
-                .Append("[slot] = ")
+                .Append(".Add(")
                 .Append(FieldValueExpression(field, parameterNames))
-                .AppendLine(";");
+                .AppendLine(");");
         }
-        sb.AppendLine("        __SoAInitializeExtendedColumns(slot);");
+        sb.AppendLine("        __SoAInitializeExtendedColumns();");
         sb.AppendLine("        return slot;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
-        sb.AppendLine("    protected virtual void __SoAInitializeExtendedColumns(int slot) { }");
+        sb.AppendLine("    protected virtual void __SoAInitializeExtendedColumns() { }");
         sb.AppendLine();
 
         sb.AppendLine("    public void RemoveAt(int slot)");
         sb.AppendLine("    {");
-        sb.Append("        ").Append(rootAnchor.StorageName).AppendLine(".RemoveAt(slot);");
+        sb.Append("        int denseIndex = ")
+            .Append(rootAnchor.StorageName)
+            .AppendLine(".GetDenseIndex(slot);");
+        sb.AppendLine("        int lastDenseIndex = Count - 1;");
+        sb.AppendLine("        __SoARemoveExtendedColumns(denseIndex, lastDenseIndex);");
+        foreach (var field in target.Fields)
+        {
+            if (ReferenceEquals(field, rootAnchor))
+                continue;
+            AppendSwapRemove(sb, field.StorageName, "        ");
+        }
+        sb.Append("        ").Append(rootAnchor.StorageName).AppendLine(".Remove(slot);");
         sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine(
+            "    protected virtual void __SoARemoveExtendedColumns(int denseIndex, int lastDenseIndex) { }"
+        );
         sb.AppendLine();
 
         sb.AppendLine("    public void Clear()");
         sb.AppendLine("    {");
+        sb.AppendLine("        __SoAClearExtendedColumns();");
+        foreach (var field in target.Fields)
+        {
+            if (!ReferenceEquals(field, rootAnchor))
+                sb.Append("        ").Append(field.StorageName).AppendLine(".Resize(0);");
+        }
         sb.Append("        ").Append(rootAnchor.StorageName).AppendLine(".Clear();");
         sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine("    protected virtual void __SoAClearExtendedColumns() { }");
         sb.AppendLine();
 
         sb.AppendLine("    public void Dispose()");
@@ -613,7 +647,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
-        sb.Append("    protected UnsafeColony<")
+        sb.Append("    protected UnsafeSlotMap<")
             .Append(rootAnchor.Field.TypeDisplay)
             .Append(">.Enumerator __SoAGetSlotEnumerator() => ")
             .Append(rootAnchor.StorageName)
@@ -656,7 +690,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         {
             sb.Append("        ")
                 .Append(field.StorageName)
-                .Append("[slot] = ")
+                .Append("[Count - 1] = ")
                 .Append(FieldValueExpression(field, parameterNames))
                 .AppendLine(";");
         }
@@ -664,11 +698,29 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
 
-        sb.AppendLine("    protected override void __SoAInitializeExtendedColumns(int slot)");
+        sb.AppendLine("    protected override void __SoAInitializeExtendedColumns()");
         sb.AppendLine("    {");
-        sb.AppendLine("        base.__SoAInitializeExtendedColumns(slot);");
+        sb.AppendLine("        base.__SoAInitializeExtendedColumns();");
         foreach (var field in target.Fields)
-            sb.Append("        ").Append(field.StorageName).AppendLine("[slot] = default;");
+            sb.Append("        ").Append(field.StorageName).AppendLine(".Add(default);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine(
+            "    protected override void __SoARemoveExtendedColumns(int denseIndex, int lastDenseIndex)"
+        );
+        sb.AppendLine("    {");
+        sb.AppendLine("        base.__SoARemoveExtendedColumns(denseIndex, lastDenseIndex);");
+        foreach (var field in target.Fields)
+            AppendSwapRemove(sb, field.StorageName, "        ");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine("    protected override void __SoAClearExtendedColumns()");
+        sb.AppendLine("    {");
+        foreach (var field in target.Fields)
+            sb.Append("        ").Append(field.StorageName).AppendLine(".Resize(0);");
+        sb.AppendLine("        base.__SoAClearExtendedColumns();");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -679,6 +731,18 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("        base.__SoADisposeColumns();");
         sb.AppendLine("    }");
         sb.AppendLine();
+    }
+
+    static void AppendSwapRemove(StringBuilder sb, string storageName, string indent)
+    {
+        sb.Append(indent).AppendLine("if (denseIndex != lastDenseIndex)");
+        sb.Append(indent)
+            .Append("    ")
+            .Append(storageName)
+            .Append("[denseIndex] = ")
+            .Append(storageName)
+            .AppendLine("[lastDenseIndex];");
+        sb.Append(indent).Append(storageName).AppendLine(".Resize(lastDenseIndex);");
     }
 
     static void AppendDefaultInsert(
@@ -761,6 +825,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
     static void AppendTargetView(
         StringBuilder sb,
         TargetModel target,
+        TargetField rootAnchor,
         TargetField[] allFields,
         string viewName,
         bool isRoot
@@ -799,13 +864,20 @@ public sealed class SoAGenerator : IIncrementalGenerator
             .Append(target.FullyQualifiedName)
             .AppendLine(" soa, int slot)");
         sb.AppendLine("        {");
+        sb.Append("            this.")
+            .Append(rootAnchor.Field.EscapedName)
+            .Append(" = ref soa.")
+            .Append(rootAnchor.AccessorName)
+            .AppendLine("(slot, out int denseIndex);");
         foreach (var field in allFields)
         {
+            if (ReferenceEquals(field, rootAnchor))
+                continue;
             sb.Append("            this.")
                 .Append(field.Field.EscapedName)
                 .Append(" = ref soa.")
                 .Append(field.AccessorName)
-                .AppendLine("(slot);");
+                .AppendLine("(denseIndex);");
         }
         sb.AppendLine("        }");
         sb.AppendLine("    }");
@@ -837,14 +909,14 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.Append("        private readonly ")
             .Append(target.FullyQualifiedName)
             .AppendLine(" _soa;");
-        sb.Append("        private UnsafeColony<")
+        sb.Append("        private UnsafeSlotMap<")
             .Append(rootAnchor.Field.TypeDisplay)
             .AppendLine(">.Enumerator _inner;");
         sb.AppendLine();
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("        internal Enumerator(")
             .Append(target.FullyQualifiedName)
-            .Append(" soa, UnsafeColony<")
+            .Append(" soa, UnsafeSlotMap<")
             .Append(rootAnchor.Field.TypeDisplay)
             .AppendLine(">.Enumerator inner)");
         sb.AppendLine("        {");
@@ -926,7 +998,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         var sb = new StringBuilder();
         var soaName = $"{model.StructName}SoA";
         var accessibility = AccessibilityText(model.Accessibility);
-        var colony = model.Fields[0];
+        var master = model.Fields[0];
         var parallel = model.Fields.Skip(1).ToArray();
         var viewName = UniqueNestedTypeName("View", model.Fields);
         var readOnlyViewName = UniqueNestedTypeName("ReadOnlyView", model.Fields);
@@ -955,9 +1027,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
 
         foreach (var field in model.Fields)
         {
-            if (field.IsColony)
+            if (field.IsMaster)
             {
-                sb.Append("    private UnsafeColony<")
+                sb.Append("    private UnsafeSlotMap<")
                     .Append(field.TypeDisplay)
                     .Append("> ")
                     .Append(field.StorageName)
@@ -965,7 +1037,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.Append("    private UnsafeChunkedList<")
+                sb.Append("    private UnsafeList<")
                     .Append(field.TypeDisplay)
                     .Append("> ")
                     .Append(field.StorageName)
@@ -977,17 +1049,17 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.Append("    public ").Append(soaName).AppendLine("()");
         sb.AppendLine("    {");
         sb.Append("        ")
-            .Append(colony.StorageName)
-            .Append(" = new UnsafeColony<")
-            .Append(colony.TypeDisplay)
+            .Append(master.StorageName)
+            .Append(" = new UnsafeSlotMap<")
+            .Append(master.TypeDisplay)
             .AppendLine(">();");
         foreach (var field in parallel)
         {
             sb.Append("        ")
                 .Append(field.StorageName)
-                .Append(" = new UnsafeChunkedList<")
+                .Append(" = new UnsafeList<")
                 .Append(field.TypeDisplay)
-                .AppendLine(">();");
+                .AppendLine(">(0);");
         }
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -995,14 +1067,14 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    public int Count");
         sb.AppendLine("    {");
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
-        sb.Append("        get => ").Append(colony.StorageName).AppendLine(".Count;");
+        sb.Append("        get => ").Append(master.StorageName).AppendLine(".Count;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
         sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("    public bool IsAlive(int slot) => ")
-            .Append(colony.StorageName)
-            .AppendLine(".IsActive(slot);");
+            .Append(master.StorageName)
+            .AppendLine(".Contains(slot);");
         sb.AppendLine();
 
         sb.Append("    public int Insert() => Insert(default(")
@@ -1015,9 +1087,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
             .AppendLine(" value)");
         sb.AppendLine("    {");
         sb.Append("        int slot = ")
-            .Append(colony.StorageName)
+            .Append(master.StorageName)
             .Append(".Insert(value.")
-            .Append(colony.EscapedName)
+            .Append(master.EscapedName)
             .AppendLine(");");
         if (parallel.Length > 0)
         {
@@ -1025,9 +1097,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
             {
                 sb.Append("        ")
                     .Append(field.StorageName)
-                    .Append("[slot] = value.")
+                    .Append(".Add(value.")
                     .Append(field.EscapedName)
-                    .AppendLine(";");
+                    .AppendLine(");");
             }
         }
         sb.AppendLine("        return slot;");
@@ -1040,7 +1112,13 @@ public sealed class SoAGenerator : IIncrementalGenerator
         );
         sb.AppendLine("    public void RemoveAt(int slot)");
         sb.AppendLine("    {");
-        sb.Append("        ").Append(colony.StorageName).AppendLine(".RemoveAt(slot);");
+        sb.Append("        int denseIndex = ")
+            .Append(master.StorageName)
+            .AppendLine(".GetDenseIndex(slot);");
+        sb.AppendLine("        int lastDenseIndex = Count - 1;");
+        foreach (var field in parallel)
+            AppendSwapRemove(sb, field.StorageName, "        ");
+        sb.Append("        ").Append(master.StorageName).AppendLine(".Remove(slot);");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -1052,7 +1130,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
         );
         sb.AppendLine("    public void Clear()");
         sb.AppendLine("    {");
-        sb.Append("        ").Append(colony.StorageName).AppendLine(".Clear();");
+        foreach (var field in parallel)
+            sb.Append("        ").Append(field.StorageName).AppendLine(".Resize(0);");
+        sb.Append("        ").Append(master.StorageName).AppendLine(".Clear();");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -1076,10 +1156,10 @@ public sealed class SoAGenerator : IIncrementalGenerator
         );
         sb.AppendLine("    /// <remarks>");
         sb.AppendLine(
-            "    /// References exposed by the view remain valid across insertions, but become invalid when"
+            "    /// References exposed by the view become invalid after any insertion, removal, clear, or"
         );
         sb.AppendLine(
-            "    /// the element is removed or when the collection is cleared or disposed."
+            "    /// disposal because dense storage may relocate or rows may move."
         );
         sb.AppendLine("    /// </remarks>");
         sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
@@ -1092,7 +1172,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
 
         sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("    public Enumerator GetEnumerator() => new Enumerator(this, ")
-            .Append(colony.StorageName)
+            .Append(master.StorageName)
             .AppendLine(".GetEnumerator());");
         sb.AppendLine();
 
@@ -1102,9 +1182,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
         );
         sb.AppendLine("    /// <remarks>");
         sb.AppendLine(
-            "    /// Field references remain valid across insertions. They are invalid after the element is"
+            "    /// Field references become invalid after any insertion, removal, clear, or disposal because"
         );
-        sb.AppendLine("    /// removed or after the owning collection is cleared or disposed.");
+        sb.AppendLine("    /// dense storage may relocate or rows may move.");
         sb.AppendLine("    /// </remarks>");
         sb.Append("    public readonly ref struct ").AppendLine(viewName);
         sb.AppendLine("    {");
@@ -1127,13 +1207,18 @@ public sealed class SoAGenerator : IIncrementalGenerator
             .Append(soaName)
             .AppendLine(" soa, int slot)");
         sb.AppendLine("        {");
-        foreach (var field in model.Fields)
+        sb.Append("            this.")
+            .Append(master.EscapedName)
+            .Append(" = ref soa.")
+            .Append(master.StorageName)
+            .AppendLine(".UnsafeRef(slot, out int denseIndex);");
+        foreach (var field in parallel)
         {
             sb.Append("            this.")
                 .Append(field.EscapedName)
                 .Append(" = ref soa.")
                 .Append(field.StorageName)
-                .AppendLine("[slot];");
+                .AppendLine("[denseIndex];");
         }
         sb.AppendLine("        }");
         sb.AppendLine("    }");
@@ -1143,15 +1228,15 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    public ref struct Enumerator");
         sb.AppendLine("    {");
         sb.Append("        private readonly ").Append(soaName).AppendLine(" _soa;");
-        sb.Append("        private UnsafeColony<")
-            .Append(colony.TypeDisplay)
+        sb.Append("        private UnsafeSlotMap<")
+            .Append(master.TypeDisplay)
             .AppendLine(">.Enumerator _inner;");
         sb.AppendLine();
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("        internal Enumerator(")
             .Append(soaName)
-            .Append(" soa, UnsafeColony<")
-            .Append(colony.TypeDisplay)
+            .Append(" soa, UnsafeSlotMap<")
+            .Append(master.TypeDisplay)
             .AppendLine(">.Enumerator inner)");
         sb.AppendLine("        {");
         sb.AppendLine("            _soa = soa;");
@@ -1180,7 +1265,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
             sb,
             model,
             soaName,
-            colony,
+            master,
             readOnlyViewName,
             readOnlyEnumerableName,
             readOnlySlotName
@@ -1194,7 +1279,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         StringBuilder sb,
         SoAModel model,
         string soaName,
-        FieldModel colony,
+        FieldModel master,
         string readOnlyViewName,
         string readOnlyEnumerableName,
         string readOnlySlotName
@@ -1271,13 +1356,18 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.Append("            ")
             .Append(readOnlySlotName)
             .AppendLine(" = slot;");
-        for (var i = 0; i < model.Fields.Length; i++)
+        sb.Append("            ")
+            .Append(backingNames[0])
+            .Append(" = ref soa.")
+            .Append(master.StorageName)
+            .AppendLine(".UnsafeRef(slot, out int denseIndex);");
+        for (var i = 1; i < model.Fields.Length; i++)
         {
             sb.Append("            ")
                 .Append(backingNames[i])
                 .Append(" = ref soa.")
                 .Append(model.Fields[i].StorageName)
-                .AppendLine("[slot];");
+                .AppendLine("[denseIndex];");
         }
         sb.AppendLine("        }");
         sb.AppendLine("    }");
@@ -1302,8 +1392,8 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    public ref struct ReadOnlyEnumerator");
         sb.AppendLine("    {");
         sb.Append("        private readonly ").Append(soaName).AppendLine(" _soa;");
-        sb.Append("        private UnsafeColony<")
-            .Append(colony.TypeDisplay)
+        sb.Append("        private UnsafeSlotMap<")
+            .Append(master.TypeDisplay)
             .AppendLine(">.Enumerator _inner;");
         sb.AppendLine();
         sb.AppendLine("        [MethodImpl(MethodImplOptions.AggressiveInlining)]");
@@ -1313,7 +1403,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            _soa = soa;");
         sb.Append("            _inner = soa.")
-            .Append(colony.StorageName)
+            .Append(master.StorageName)
             .AppendLine(".GetEnumerator();");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -1489,7 +1579,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
             Accessibility accessibility,
             Location? location,
             bool isSupportedStorageType,
-            bool IsColony
+            bool IsMaster
         )
         {
             Name = name;
@@ -1499,7 +1589,7 @@ public sealed class SoAGenerator : IIncrementalGenerator
             Accessibility = accessibility;
             Location = location;
             IsSupportedStorageType = isSupportedStorageType;
-            this.IsColony = IsColony;
+            this.IsMaster = IsMaster;
         }
 
         public string Name { get; }
@@ -1509,6 +1599,6 @@ public sealed class SoAGenerator : IIncrementalGenerator
         public Accessibility Accessibility { get; }
         public Location? Location { get; }
         public bool IsSupportedStorageType { get; }
-        public bool IsColony { get; }
+        public bool IsMaster { get; }
     }
 }

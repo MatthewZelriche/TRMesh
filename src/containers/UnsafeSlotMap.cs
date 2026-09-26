@@ -73,6 +73,21 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly ref T UnsafeRef(int handle) => ref _denseValues[ResolveDenseIndex(handle)];
 
+    // Returns the dense row associated with handle. The returned index is intended for owners of
+    // parallel dense storage and must not be retained across structural modifications.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly int GetDenseIndex(int handle) => ResolveDenseIndex(handle);
+
+    // Resolves handle once while exposing both its value and dense row to owners of parallel
+    // storage. The returned reference and dense index have the same lifetime restrictions as
+    // UnsafeRef(handle).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly ref T UnsafeRef(int handle, out int denseIndex)
+    {
+        denseIndex = ResolveDenseIndex(handle);
+        return ref _denseValues[denseIndex];
+    }
+
     // Inserts value and returns its stable sparse-array handle. Removed handles are reused.
     public int Insert(T value)
     {
