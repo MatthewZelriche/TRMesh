@@ -66,6 +66,55 @@ public unsafe class UnsafeSlotMapTests
     }
 
     [Fact]
+    public void InsertAt_ActivatesRequestedFreeHandleAndRepairsFreePool()
+    {
+        using var map = new UnsafeSlotMap<int>();
+        int first = map.Insert(10);
+        int requested = map.Insert(20);
+        int otherFree = map.Insert(30);
+        map.Remove(requested);
+        map.Remove(otherFree);
+
+        map.InsertAt(requested, 200);
+
+        Assert.Equal(2, map.Count);
+        Assert.Equal(10, map[first]);
+        Assert.Equal(200, map[requested]);
+        Assert.Equal(otherFree, map.Insert(300));
+        Assert.Equal(300, map[otherFree]);
+    }
+
+    [Fact]
+    public void InsertAt_BeyondSparseExtentLeavesIntermediateHandlesReusable()
+    {
+        using var map = new UnsafeSlotMap<int>();
+        Assert.Equal(0, map.Insert(10));
+
+        map.InsertAt(5, 50);
+
+        Assert.Equal(2, map.Count);
+        Assert.Equal(50, map[5]);
+        for (int handle = 1; handle < 5; handle++)
+            Assert.False(map.Contains(handle));
+
+        var reused = new HashSet<int>();
+        for (int i = 0; i < 4; i++)
+            reused.Add(map.Insert(100 + i));
+
+        Assert.Equal(new HashSet<int> { 1, 2, 3, 4 }, reused);
+    }
+
+    [Fact]
+    public void InsertAt_RejectsNegativeAndActiveHandles()
+    {
+        using var map = new UnsafeSlotMap<int>();
+        int active = map.Insert(10);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => map.InsertAt(-1, 20));
+        Assert.Throws<InvalidOperationException>(() => map.InsertAt(active, 20));
+    }
+
+    [Fact]
     public void ByValueIndexer_SupportsWithExpressionUpdate()
     {
         var map = new UnsafeSlotMap<TestValue>();

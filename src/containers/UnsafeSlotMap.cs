@@ -4,8 +4,8 @@ using System.Runtime.CompilerServices;
 namespace TRMesh.Containers;
 
 // A dense slot map backed entirely by native allocations. Handles are stable sparse-array indices,
-// while values are packed densely and filled from the end on removal. A removed handle may refer to
-// a different value after its sparse slot is reused.
+// while values are packed densely. A removed handle may refer to a different value after its
+// sparse slot is reused.
 //
 // References into the map may be invalidated by either insertion (reallocation) or erasure
 // (swap-removal).
@@ -14,13 +14,32 @@ namespace TRMesh.Containers;
 public unsafe struct UnsafeSlotMap<T> : IDisposable
     where T : unmanaged
 {
+    // Stores the actual values themselves.
     UnsafeList<T> _denseValues;
-    UnsafeList<int> _denseToSparse;
 
-    // Active entries contain a nonnegative dense index. Vacant entries contain an encoded negative
-    // link to the next sparse index in the free list.
+    // Book-keeping metadata
+    // D = Number of currently stored dense elements (the actual payload)
+    // S = Number of allocated sparse handle slots.
+    // Usually, but not always, S is equal to the historical maximum count of D.
+    // This can be untrue in the case of InsertAt(), however. S >= D
+    //
+    // At any point, the sizes of the lists are:
+    // _denseValues.Count = D
+    // _denseToSparse.Count = D
+    // _freeHandles.Count = S - D
+    // _sparse = S
+    // Logical metadata: (D + (S - D) + S) * sizeof(int) = 8 * S bytes
+    // (not including unused Capacity of the lists)
+
+    // Stores an inverse mapping - necessary to update _sparse when we perform a swap-and-pop for O(1) erasure
+    UnsafeList<int> _denseToSparse;
+    // Stores an unordered list of free handle slots. We can't get away with an embedded linked list here
+    // because of InsertAt() being needed for Undo/Restore functionality, and there being no O(1) method to implement
+    // InsertAt() with a singly-linked freelist.
+    UnsafeList<int> _freeHandles;
+    // Active entries contain a nonnegative dense index. Vacant entries contain the bitwise
+    // complement of their index in _freeHandles.
     UnsafeList<int> _sparse;
-    int _freeListHead;
 
     public UnsafeSlotMap()
         : this(0) { }
@@ -31,7 +50,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         _denseValues = new UnsafeList<T>(initialCapacity);
         _denseToSparse = new UnsafeList<int>(initialCapacity);
         _sparse = new UnsafeList<int>(initialCapacity);
-        _freeListHead = -1;
+        _freeHandles = new UnsafeList<int>(0);
     }
 
     public readonly int Count => _denseValues.Count;
@@ -57,18 +76,16 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     // Inserts value and returns its stable sparse-array handle. Removed handles are reused.
     public int Insert(T value)
     {
-        EnsureInitialized();
-
         int denseIndex = _denseValues.Count;
         int sparseIndex;
 
-        if (_freeListHead >= 0)
+        if (_freeHandles.Count != 0)
         {
-            sparseIndex = _freeListHead;
-            ref int sparseEntry = ref _sparse[sparseIndex];
-            Debug.Assert(sparseEntry < 0);
-            _freeListHead = DecodeFreeListLink(sparseEntry);
-            sparseEntry = denseIndex;
+            int freeIndex = _freeHandles.Count - 1;
+            sparseIndex = _freeHandles[freeIndex];
+            _freeHandles.Count = freeIndex;
+            Debug.Assert(_sparse[sparseIndex] == ~freeIndex);
+            _sparse[sparseIndex] = denseIndex;
         }
         else
         {
@@ -80,6 +97,42 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         _denseToSparse.Add(sparseIndex);
         Debug.Assert(_denseValues.Count == _denseToSparse.Count);
         return sparseIndex;
+    }
+
+    // Activates a specific sparse handle and appends value to dense storage. Missing intermediate
+    // handles are created as vacant slots. This is primarily intended for restoring externally
+    // visible handle identities, such as when applying an undo/redo patch.
+    public void InsertAt(int handle, T value)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(handle);
+
+        while (_sparse.Count <= handle)
+        {
+            int newHandle = _sparse.Count;
+            int freeIndex = _freeHandles.Count;
+            _sparse.Add(~freeIndex);
+            _freeHandles.Add(newHandle);
+        }
+
+        int encodedFreeIndex = _sparse[handle];
+        if (encodedFreeIndex >= 0)
+            throw new InvalidOperationException($"Handle {handle} is already active.");
+
+        int freeIndexToRemove = ~encodedFreeIndex;
+        int lastFreeIndex = _freeHandles.Count - 1;
+        Debug.Assert((uint)freeIndexToRemove <= (uint)lastFreeIndex);
+        Debug.Assert(_freeHandles[freeIndexToRemove] == handle);
+
+        int movedFreeHandle = _freeHandles[lastFreeIndex];
+        _freeHandles[freeIndexToRemove] = movedFreeHandle;
+        _sparse[movedFreeHandle] = ~freeIndexToRemove;
+        _freeHandles.Count = lastFreeIndex;
+
+        int denseIndex = _denseValues.Count;
+        _sparse[handle] = denseIndex;
+        _denseValues.Add(value);
+        _denseToSparse.Add(handle);
+        Debug.Assert(_denseValues.Count == _denseToSparse.Count);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -104,6 +157,9 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         if (!Contains(handle))
             return false;
 
+        int freeIndex = _freeHandles.Count;
+        _freeHandles.Add(handle);
+
         int removedDenseIndex = _sparse[handle];
         int lastDenseIndex = _denseValues.Count - 1;
 
@@ -119,8 +175,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         _denseValues.Count = lastDenseIndex;
         _denseToSparse.Count = lastDenseIndex;
 
-        _sparse[handle] = EncodeFreeListLink(_freeListHead);
-        _freeListHead = handle;
+        _sparse[handle] = ~freeIndex;
         Debug.Assert(_denseValues.Count == _denseToSparse.Count);
         return true;
     }
@@ -128,11 +183,15 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     // Removes every value while retaining all native allocations and reusable sparse handles.
     public void Clear()
     {
-        _freeListHead = -1;
+        _freeHandles.Count = 0;
+        if (_freeHandles.Capacity < _sparse.Count)
+            _freeHandles.SetCapacity(_sparse.Count);
+
         for (int sparseIndex = _sparse.Count - 1; sparseIndex >= 0; sparseIndex--)
         {
-            _sparse[sparseIndex] = EncodeFreeListLink(_freeListHead);
-            _freeListHead = sparseIndex;
+            int freeIndex = _freeHandles.Count;
+            _freeHandles.Add(sparseIndex);
+            _sparse[sparseIndex] = ~freeIndex;
         }
 
         _denseValues.Count = 0;
@@ -144,7 +203,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         _denseValues.Dispose();
         _denseToSparse.Dispose();
         _sparse.Dispose();
-        _freeListHead = -1;
+        _freeHandles.Dispose();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -190,18 +249,4 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
 
         return _sparse[handle];
     }
-
-    // The all-zero default struct has a free-list head of zero rather than the -1 sentinel.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void EnsureInitialized()
-    {
-        if (_sparse.Count == 0 && _freeListHead == 0)
-            _freeListHead = -1;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static int EncodeFreeListLink(int next) => -2 - next;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static int DecodeFreeListLink(int encoded) => -2 - encoded;
 }
