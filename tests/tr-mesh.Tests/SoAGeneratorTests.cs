@@ -74,6 +74,26 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
+    public void ColumnGettersAndSetters_UseValueSemantics()
+    {
+        using var soa = new TestEntitySoA();
+        int slot = soa.Insert(new TestEntity { Id = 1, Health = 2f, Flags = 3 });
+
+        Assert.Equal(1, soa.GetId(slot));
+        Assert.Equal(2f, soa.GetHealth(slot));
+        Assert.Equal(3, soa.GetFlags(slot));
+
+        soa.SetId(slot, 10);
+        soa.SetHealth(slot, 20f);
+        soa.SetFlags(slot, 30);
+
+        TestEntity value = soa.Get(slot);
+        Assert.Equal(10, value.Id);
+        Assert.Equal(20f, value.Health);
+        Assert.Equal(30, value.Flags);
+    }
+
+    [Fact]
     public void GetPointers_ProvidesExplicitPointerAccess()
     {
         using var soa = new TestEntitySoA();
@@ -288,6 +308,15 @@ public unsafe class SoAGeneratorTests
         Assert.Equal(6, view.soa);
         Assert.Equal(7, view.slot);
         Assert.Equal(8, view.View);
+
+        Assert.Equal(1, soa.GetFoo(slot));
+        Assert.Equal(2, soa.GetFoo_(slot));
+        Assert.Equal(3, soa.GetEvent(slot));
+
+        soa.SetFoo_(slot, 20);
+        soa.SetEvent(slot, 30);
+        Assert.Equal(20, soa.Get(slot).foo);
+        Assert.Equal(30, soa.Get(slot).@event);
     }
 
     [Fact]
@@ -312,6 +341,32 @@ public unsafe class SoAGeneratorTests
         TargetMesh topology = mesh;
         Assert.Equal(20, topology.Get(second).Vertex);
         Assert.Equal(21, topology.Get(second).Next);
+    }
+
+    [Fact]
+    public void TargetedSoA_ColumnGettersAndSettersSpanTheHierarchy()
+    {
+        using var mesh = new TargetSpatialMesh();
+        int slot = mesh.Insert(
+            new TopologyInfo { Vertex = 1, Next = 2 },
+            new SpatialInfo { Position = 3f, UV = 4f }
+        );
+
+        Assert.Equal(1, mesh.GetVertex(slot));
+        Assert.Equal(2, mesh.GetNext(slot));
+        Assert.Equal(3f, mesh.GetPosition(slot));
+        Assert.Equal(4f, mesh.GetUV(slot));
+
+        mesh.SetVertex(slot, 10);
+        mesh.SetNext(slot, 20);
+        mesh.SetPosition(slot, 30f);
+        mesh.SetUV(slot, 40f);
+
+        TargetSpatialMesh.View value = mesh.Get(slot);
+        Assert.Equal(10, value.Vertex);
+        Assert.Equal(20, value.Next);
+        Assert.Equal(30f, value.Position);
+        Assert.Equal(40f, value.UV);
     }
 
     [Fact]
