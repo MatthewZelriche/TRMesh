@@ -50,19 +50,15 @@ public unsafe class UnsafeSlotMapTests
     }
 
     [Fact]
-    public void DefaultInitializedMap_CanInsert()
+    public void Map_IsAReferenceTypeWithOneNativeOwner()
     {
-        UnsafeSlotMap<int> map = default;
-        try
-        {
-            var key = map.Insert(42);
+        using var map = new UnsafeSlotMap<int>();
+        UnsafeSlotMap<int> alias = map;
 
-            Assert.Equal(42, map[key]);
-        }
-        finally
-        {
-            map.Dispose();
-        }
+        var key = alias.Insert(42);
+
+        Assert.Same(map, alias);
+        Assert.Equal(42, map[key]);
     }
 
     [Fact]
@@ -133,13 +129,13 @@ public unsafe class UnsafeSlotMapTests
     }
 
     [Fact]
-    public void UnsafeRef_CanMutateValueInPlace()
+    public void GetPointer_CanMutateValueInPlace()
     {
         using var map = new UnsafeSlotMap<int>();
         var key = map.Insert(1);
 
-        ref int value = ref map.UnsafeRef(key);
-        value = 5;
+        int* value = map.GetPointer(key);
+        *value = 5;
 
         Assert.Equal(5, map[key]);
     }
@@ -172,15 +168,11 @@ public unsafe class UnsafeSlotMapTests
         var second = map.Insert(20);
         var last = map.Insert(30);
 
-        int* before;
-        fixed (int* pointer = &map.UnsafeRef(last))
-            before = pointer;
+        int* before = map.GetPointer(last);
 
         Assert.True(map.Remove(first));
 
-        int* after;
-        fixed (int* pointer = &map.UnsafeRef(last))
-            after = pointer;
+        int* after = map.GetPointer(last);
 
         Assert.True(before != after);
         Assert.Equal(30, *after);
@@ -208,6 +200,19 @@ public unsafe class UnsafeSlotMapTests
 
         Assert.Equal(new[] { first, third }, handles);
         Assert.Equal(new[] { 10, 30 }, values);
+    }
+
+    [Fact]
+    public void Enumerator_FailsFastAfterStructuralModification()
+    {
+        using var map = new UnsafeSlotMap<int>();
+        map.Insert(10);
+        var enumerator = map.GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+
+        map.Insert(20);
+
+        Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
     }
 
     [Fact]

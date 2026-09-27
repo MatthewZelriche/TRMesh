@@ -24,7 +24,7 @@ public struct FaceData
     public Vector3 normal;
 }
 
-public partial class SpatialMesh : IDisposable
+public unsafe partial class SpatialMesh : IDisposable
 {
     public const int INVALID_HANDLE = -1;
 
@@ -116,7 +116,7 @@ public partial class SpatialMesh : IDisposable
             if (existing == INVALID_HANDLE)
                 continue;
 
-            if (_faces.IsAlive(HalfEdgeRef(existing).AdjacentFace))
+            if (_faces.IsAlive(HalfEdgePtr(existing)->AdjacentFace))
             {
                 throw new ArgumentException(
                     $"AddFace: An edge from {vtx} to {vtxNext} already exists and is not a boundary edge.",
@@ -166,21 +166,21 @@ public partial class SpatialMesh : IDisposable
             int heHandle;
             if (existing != INVALID_HANDLE)
             {
-                HalfEdgeRef(existing).AdjacentFace = faceHandle;
+                HalfEdgePtr(existing)->AdjacentFace = faceHandle;
                 heHandle = existing;
             }
             else
             {
                 int nextVertex = (i + 1) % n;
                 heHandle = ConstructEdge(vertices[i], vertices[nextVertex]);
-                HalfEdgeRef(heHandle).AdjacentFace = faceHandle;
+                HalfEdgePtr(heHandle)->AdjacentFace = faceHandle;
             }
 
             hedges[i] = heHandle;
-            _halfEdges.Get(heHandle).UV = cornerUvs[i];
+            *HalfEdgeUvPtr(heHandle) = cornerUvs[i];
         }
 
-        _faces.Get(faceHandle).topology.AdjacentHalfEdge = hedges[0];
+        FacePtr(faceHandle)->AdjacentHalfEdge = hedges[0];
 
         // Perform the miserable task of linking up all the half-edges correctly - in two passes.
         for (int i = 0; i < n; i++)
@@ -189,9 +189,9 @@ public partial class SpatialMesh : IDisposable
             if (existing == INVALID_HANDLE)
                 continue;
 
-            ref HalfEdge existingHe = ref HalfEdgeRef(existing);
-            oldPrev[i] = existingHe.PrevHalfEdge;
-            oldNext[i] = existingHe.NextHalfEdge;
+            HalfEdge* existingHe = HalfEdgePtr(existing);
+            oldPrev[i] = existingHe->PrevHalfEdge;
+            oldNext[i] = existingHe->NextHalfEdge;
         }
         for (int i = 0; i < n; i++)
         {
@@ -201,8 +201,8 @@ public partial class SpatialMesh : IDisposable
 
             int heHandle = hedges[i];
             int heNextHandle = hedges[iNext];
-            int heTwinHandle = HalfEdgeRef(heHandle).TwinHalfEdge;
-            int heNextTwinHandle = HalfEdgeRef(heNextHandle).TwinHalfEdge;
+            int heTwinHandle = HalfEdgePtr(heHandle)->TwinHalfEdge;
+            int heNextTwinHandle = HalfEdgePtr(heNextHandle)->TwinHalfEdge;
 
             bool currExisted = existingHandles[i] != INVALID_HANDLE;
             bool nextExisted = existingHandles[iNext] != INVALID_HANDLE;
@@ -210,13 +210,13 @@ public partial class SpatialMesh : IDisposable
             int outgoing = currExisted ? oldNext[i] : heTwinHandle;
             int incoming = nextExisted ? oldPrev[iNext] : heNextTwinHandle;
 
-            HalfEdgeRef(incoming).NextHalfEdge = outgoing;
-            HalfEdgeRef(outgoing).PrevHalfEdge = incoming;
+            HalfEdgePtr(incoming)->NextHalfEdge = outgoing;
+            HalfEdgePtr(outgoing)->PrevHalfEdge = incoming;
 
-            ref HalfEdge heW = ref HalfEdgeRef(heHandle);
-            ref HalfEdge heNextW = ref HalfEdgeRef(heNextHandle);
-            heW.NextHalfEdge = heNextHandle;
-            heNextW.PrevHalfEdge = heHandle;
+            HalfEdge* heW = HalfEdgePtr(heHandle);
+            HalfEdge* heNextW = HalfEdgePtr(heNextHandle);
+            heW->NextHalfEdge = heNextHandle;
+            heNextW->PrevHalfEdge = heHandle;
         }
 
         return faceHandle;
@@ -235,7 +235,7 @@ public partial class SpatialMesh : IDisposable
     {
         foreach (int he in new HalfEdgesAroundVertex(this, from))
         {
-            if (HalfEdgeRef(HalfEdgeRef(he).TwinHalfEdge).SourceVertex == to)
+            if (HalfEdgePtr(HalfEdgePtr(he)->TwinHalfEdge)->SourceVertex == to)
                 return he;
         }
 
@@ -247,7 +247,7 @@ public partial class SpatialMesh : IDisposable
         int he = _halfEdges.Insert();
         int twin = _halfEdges.Insert();
 
-        _halfEdges.Get(he).topology = new HalfEdge
+        *HalfEdgePtr(he) = new HalfEdge
         {
             SourceVertex = from,
             TwinHalfEdge = twin,
@@ -255,7 +255,7 @@ public partial class SpatialMesh : IDisposable
             PrevHalfEdge = twin,
             AdjacentFace = INVALID_HANDLE,
         };
-        _halfEdges.Get(twin).topology = new HalfEdge
+        *HalfEdgePtr(twin) = new HalfEdge
         {
             SourceVertex = to,
             TwinHalfEdge = he,
@@ -264,17 +264,39 @@ public partial class SpatialMesh : IDisposable
             AdjacentFace = INVALID_HANDLE,
         };
 
-        ref Vertex fromVertex = ref _vertices.Get(from).topology;
-        if (fromVertex.OutgoingHalfEdge == INVALID_HANDLE)
-            fromVertex.OutgoingHalfEdge = he;
+        Vertex* fromVertex = VertexPtr(from);
+        if (fromVertex->OutgoingHalfEdge == INVALID_HANDLE)
+            fromVertex->OutgoingHalfEdge = he;
 
-        ref Vertex toVertex = ref _vertices.Get(to).topology;
-        if (toVertex.OutgoingHalfEdge == INVALID_HANDLE)
-            toVertex.OutgoingHalfEdge = twin;
+        Vertex* toVertex = VertexPtr(to);
+        if (toVertex->OutgoingHalfEdge == INVALID_HANDLE)
+            toVertex->OutgoingHalfEdge = twin;
 
         return he;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    ref HalfEdge HalfEdgeRef(int handle) => ref _halfEdges.Get(handle).topology;
+    Vertex* VertexPtr(int handle)
+    {
+        _vertices.GetPointers(handle, out Vertex* topology, out _);
+        return topology;
+    }
+
+    HalfEdge* HalfEdgePtr(int handle)
+    {
+        _halfEdges.GetPointers(handle, out HalfEdge* topology, out _);
+        return topology;
+    }
+
+    Vector2* HalfEdgeUvPtr(int handle)
+    {
+        _halfEdges.GetPointers(handle, out _, out Vector2* uv);
+        return uv;
+    }
+
+    Face* FacePtr(int handle)
+    {
+        _faces.GetPointers(handle, out Face* topology, out _);
+        return topology;
+    }
 }

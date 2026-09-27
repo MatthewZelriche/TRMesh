@@ -7,11 +7,12 @@ namespace TRMesh.Containers;
 // while values are packed densely. A removed handle may refer to a different value after its
 // sparse slot is reused.
 //
-// References into the map may be invalidated by either insertion (reallocation) or erasure
+// Pointers into the map may be invalidated by either insertion (reallocation) or erasure
 // (swap-removal).
 //
-// Because this struct owns its native allocations inline, it is an error to ever copy this struct.
-public unsafe struct UnsafeSlotMap<T> : IDisposable
+// The map is a reference type so its native allocations cannot be accidentally copied and freed
+// through multiple owners.
+public sealed unsafe class UnsafeSlotMap<T> : IDisposable
     where T : unmanaged
 {
     // Stores the actual values themselves.
@@ -40,6 +41,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     // Active entries contain a nonnegative dense index. Vacant entries contain the bitwise
     // complement of their index in _freeHandles.
     UnsafeList<int> _sparse;
+    int _version;
 
     public UnsafeSlotMap()
         : this(0) { }
@@ -51,46 +53,70 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         _denseToSparse = new UnsafeList<int>(initialCapacity);
         _sparse = new UnsafeList<int>(initialCapacity);
         _freeHandles = new UnsafeList<int>(0);
+        _version = 0;
     }
 
-    public readonly int Count => _denseValues.Count;
-    public readonly int Capacity => _denseValues.Capacity;
+    public int Count => _denseValues.Count;
+    public int Capacity => _denseValues.Capacity;
 
     // Gets or replaces the value associated with handle. Invalid handles indicate a caller bug; use
     // TryGetValue or Contains when a handle may legitimately be inactive.
     public T this[int handle]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        readonly get => _denseValues[ResolveDenseIndex(handle)];
+        get => Get(handle);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        set => _denseValues[ResolveDenseIndex(handle)] = value;
+        set => Set(handle, value);
     }
 
-    // Opt-in reference access for performance-sensitive code. The returned reference must not be
-    // retained across Insert, Remove, Clear, or Dispose, since those operations may relocate or
-    // release dense storage.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly ref T UnsafeRef(int handle) => ref _denseValues[ResolveDenseIndex(handle)];
+    public T Get(int handle) => _denseValues[ResolveDenseIndex(handle)];
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T Get(int handle, out int denseIndex)
+    {
+        denseIndex = ResolveDenseIndex(handle);
+        return _denseValues[denseIndex];
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Set(int handle, T value) => _denseValues[ResolveDenseIndex(handle)] = value;
+
+    // Opt-in pointer access for performance-sensitive code. The returned pointer must not be
+    // retained across Insert, InsertAt, Remove, Clear, or Dispose.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T* GetPointer(int handle) => _denseValues.Ptr + ResolveDenseIndex(handle);
 
     // Returns the dense row associated with handle. The returned index is intended for owners of
     // parallel dense storage and must not be retained across structural modifications.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly int GetDenseIndex(int handle) => ResolveDenseIndex(handle);
+    public int GetDenseIndex(int handle) => ResolveDenseIndex(handle);
 
     // Resolves handle once while exposing both its value and dense row to owners of parallel
-    // storage. The returned reference and dense index have the same lifetime restrictions as
-    // UnsafeRef(handle).
+    // storage. The returned pointer and dense index have the same lifetime restrictions as
+    // GetPointer(handle).
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly ref T UnsafeRef(int handle, out int denseIndex)
+    public T* GetPointer(int handle, out int denseIndex)
     {
         denseIndex = ResolveDenseIndex(handle);
-        return ref _denseValues[denseIndex];
+        return _denseValues.Ptr + denseIndex;
+    }
+
+    // Dense pointer access supports generated bulk-processing APIs. Dense indices and both
+    // pointers are invalidated by structural modification.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void GetDensePointers(out T* values, out int* slots, out int count)
+    {
+        values = _denseValues.Ptr;
+        slots = _denseToSparse.Ptr;
+        count = _denseValues.Count;
     }
 
     // Inserts value and returns its stable sparse-array handle. Removed handles are reused.
     public int Insert(T value)
     {
+        _version++;
         int denseIndex = _denseValues.Count;
         int sparseIndex;
 
@@ -120,6 +146,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     public void InsertAt(int handle, T value)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(handle);
+        _version++;
 
         while (_sparse.Count <= handle)
         {
@@ -151,10 +178,10 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool Contains(int handle) =>
+    public bool Contains(int handle) =>
         (uint)handle < (uint)_sparse.Count && _sparse[handle] >= 0;
 
-    public readonly bool TryGetValue(int handle, out T value)
+    public bool TryGetValue(int handle, out T value)
     {
         if (!Contains(handle))
         {
@@ -172,6 +199,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
         if (!Contains(handle))
             return false;
 
+        _version++;
         int freeIndex = _freeHandles.Count;
         _freeHandles.Add(handle);
 
@@ -198,6 +226,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     // Removes every value while retaining all native allocations and reusable sparse handles.
     public void Clear()
     {
+        _version++;
         _freeHandles.Count = 0;
         if (_freeHandles.Capacity < _sparse.Count)
             _freeHandles.SetCapacity(_sparse.Count);
@@ -215,6 +244,7 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
 
     public void Dispose()
     {
+        _version++;
         _denseValues.Dispose();
         _denseToSparse.Dispose();
         _sparse.Dispose();
@@ -222,42 +252,68 @@ public unsafe struct UnsafeSlotMap<T> : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly Enumerator GetEnumerator() =>
-        new(_denseValues.Ptr, _denseToSparse.Ptr, _denseValues.Count);
+    public Enumerator GetEnumerator() => new(this);
 
-    public ref struct Enumerator
+    public struct Enumerator
     {
-        readonly T* _denseValues;
-        readonly int* _denseToSparse;
+        readonly UnsafeSlotMap<T> _map;
+        readonly int _version;
         readonly int _count;
         int _denseIndex;
 
-        internal Enumerator(T* denseValues, int* denseToSparse, int count)
+        internal Enumerator(UnsafeSlotMap<T> map)
         {
-            _denseValues = denseValues;
-            _denseToSparse = denseToSparse;
-            _count = count;
+            _map = map;
+            _version = map._version;
+            _count = map._denseValues.Count;
             _denseIndex = -1;
         }
 
-        public ref T Current
+        public T Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref _denseValues[_denseIndex];
+            get
+            {
+                ValidateCurrent();
+                return _map._denseValues[_denseIndex];
+            }
         }
 
-        public readonly int CurrentSlot
+        public int CurrentSlot
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _denseToSparse[_denseIndex];
+            get
+            {
+                ValidateCurrent();
+                return _map._denseToSparse[_denseIndex];
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool MoveNext() => ++_denseIndex < _count;
+        public bool MoveNext()
+        {
+            ValidateVersion();
+            return ++_denseIndex < _count;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void ValidateCurrent()
+        {
+            ValidateVersion();
+            if ((uint)_denseIndex >= (uint)_count)
+                throw new InvalidOperationException("The enumerator is not positioned on an element.");
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void ValidateVersion()
+        {
+            if (_version != _map._version)
+                throw new InvalidOperationException("The slot map was structurally modified during enumeration.");
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    readonly int ResolveDenseIndex(int handle)
+    int ResolveDenseIndex(int handle)
     {
         if (!Contains(handle))
             throw new KeyNotFoundException("The handle is not active in this slot map.");

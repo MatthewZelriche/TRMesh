@@ -144,13 +144,11 @@ public class SpatialMeshBuilderTests
 
     static void AssertClosed(SpatialMesh mesh)
     {
-        foreach (HalfEdgeDataSoA.ReadOnlyView halfEdge in mesh.HalfEdges)
+        mesh.WithHalfEdges((slots, topology, uvs) =>
         {
-            Assert.NotEqual(
-                SpatialMesh.INVALID_HANDLE,
-                halfEdge.topology.AdjacentFace
-            );
-        }
+            foreach (HalfEdge halfEdge in topology)
+                Assert.NotEqual(SpatialMesh.INVALID_HANDLE, halfEdge.AdjacentFace);
+        });
     }
 
     static void AssertVectorApproximately(Vector3 expected, Vector3 actual)

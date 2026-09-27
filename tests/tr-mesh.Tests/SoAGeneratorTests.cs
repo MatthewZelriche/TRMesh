@@ -42,7 +42,7 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
-    public void Insert_Get_ExposesMutableFieldRefs()
+    public void Insert_GetSet_UsesValueSemantics()
     {
         using var soa = new TestEntitySoA();
 
@@ -65,11 +65,72 @@ public unsafe class SoAGeneratorTests
 
         view.Health = 55f;
         view.Flags = 1;
+        soa.Set(slot, view);
 
         var again = soa.Get(slot);
         Assert.Equal(42, again.Id);
         Assert.Equal(55f, again.Health);
         Assert.Equal(1, again.Flags);
+    }
+
+    [Fact]
+    public void GetPointers_ProvidesExplicitPointerAccess()
+    {
+        using var soa = new TestEntitySoA();
+        int slot = soa.Insert(new TestEntity { Id = 1, Health = 2f, Flags = 3 });
+
+        soa.GetPointers(slot, out _, out float* health, out _);
+        *health = 9f;
+
+        Assert.Equal(9f, soa.Get(slot).Health);
+    }
+
+    [Fact]
+    public void Get_ReturnsSnapshotThatSurvivesStructuralModification()
+    {
+        using var soa = new TestEntitySoA();
+        int slot = soa.Insert(new TestEntity { Id = 1, Health = 2f, Flags = 3 });
+        TestEntity snapshot = soa.Get(slot);
+
+        for (int i = 0; i < 300; i++)
+            soa.Insert(new TestEntity { Id = i + 10 });
+        soa.RemoveAt(slot);
+
+        Assert.Equal(1, snapshot.Id);
+        Assert.Equal(2f, snapshot.Health);
+        Assert.Equal(3, snapshot.Flags);
+    }
+
+    [Fact]
+    public void MutableColumnCallback_ProvidesDenseBulkAccess()
+    {
+        using var soa = new TestEntitySoA();
+        int first = soa.Insert(new TestEntity { Id = 1, Health = 2f, Flags = 3 });
+        int second = soa.Insert(new TestEntity { Id = 4, Health = 5f, Flags = 6 });
+
+        soa.WithMutableColumns(
+            (slots, ids, health, flags) =>
+            {
+                Assert.Equal(new[] { first, second }, slots.ToArray());
+                for (int i = 0; i < health.Length; i++)
+                    health[i] *= 2f;
+            }
+        );
+
+        Assert.Equal(4f, soa.Get(first).Health);
+        Assert.Equal(10f, soa.Get(second).Health);
+    }
+
+    [Fact]
+    public void ColumnCallback_RejectsStructuralModification()
+    {
+        using var soa = new TestEntitySoA();
+        soa.Insert();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            soa.WithReadOnlyColumns((slots, ids, health, flags) => soa.Insert())
+        );
+        Assert.Equal(1, soa.Insert());
     }
 
     [Fact]
@@ -102,7 +163,7 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
-    public void ReadOnlyViewAndEnumerator_ExposeGeneratedFieldsAndStableSlots()
+    public void ReadOnlyColumnCallback_ExposesGeneratedFieldsAndStableSlots()
     {
         using var soa = new TestEntitySoA();
         int first = soa.Insert(new TestEntity { Id = 1, Health = 2f, Flags = 3 });
@@ -110,22 +171,13 @@ public unsafe class SoAGeneratorTests
         int third = soa.Insert(new TestEntity { Id = 7, Health = 8f, Flags = 9 });
         soa.RemoveAt(removed);
 
-        TestEntitySoA.ReadOnlyView firstView = soa.GetReadOnly(first);
-        Assert.Equal(first, firstView.Slot);
-        Assert.Equal(1, firstView.Id);
-        Assert.Equal(2f, firstView.Health);
-        Assert.Equal(3, firstView.Flags);
-
-        var slots = new List<int>();
-        var ids = new List<int>();
-        foreach (TestEntitySoA.ReadOnlyView view in soa.AsReadOnly())
+        soa.WithReadOnlyColumns((slots, ids, health, flags) =>
         {
-            slots.Add(view.Slot);
-            ids.Add(view.Id);
-        }
-
-        Assert.Equal([first, third], slots);
-        Assert.Equal([1, 7], ids);
+            Assert.Equal([first, third], slots.ToArray());
+            Assert.Equal([1, 7], ids.ToArray());
+            Assert.Equal([2f, 8f], health.ToArray());
+            Assert.Equal<byte>([3, 9], flags.ToArray());
+        });
     }
 
     [Fact]
@@ -172,6 +224,7 @@ public unsafe class SoAGeneratorTests
         var view = soa.Get(slot);
         view.Health = 123f;
         view.Flags = 45;
+        soa.Set(slot, view);
 
         var again = soa.Get(slot);
         Assert.Equal(1, again.Id);
@@ -325,6 +378,28 @@ public unsafe class SoAGeneratorTests
     }
 
     [Fact]
+    public void TargetedDerivedSoA_ProvidesPointerAndBulkApis()
+    {
+        using var mesh = new TargetSpatialMesh();
+        int slot = mesh.Insert(
+            new TopologyInfo { Vertex = 1, Next = 2 },
+            new SpatialInfo { Position = 3f, UV = 4f }
+        );
+
+        mesh.GetPointers(slot, out int* vertex, out _, out _, out float* uv);
+        *vertex = 10;
+        *uv = 40f;
+        mesh.WithMutableColumns(
+            (slots, vertices, next, positions, uvs) => positions[0] = 30f
+        );
+
+        TargetSpatialMesh.View value = mesh.Get(slot);
+        Assert.Equal(10, value.Vertex);
+        Assert.Equal(30f, value.Position);
+        Assert.Equal(40f, value.UV);
+    }
+
+    [Fact]
     public void TargetedSoA_UnionsMultipleComponentsOnOneClass()
     {
         using var target = new MultiComponentTarget();
@@ -361,7 +436,7 @@ public unsafe class SoAGeneratorTests
         Assert.DoesNotContain(generatedFields, IsUnsafeColonyField);
         Assert.All(
             generatedFields.Where(field => !IsUnsafeSlotMapField(field)),
-            field => Assert.True(IsUnsafeListField(field))
+            field => Assert.True(IsUnsafeListField(field) || field.FieldType == typeof(int))
         );
     }
 

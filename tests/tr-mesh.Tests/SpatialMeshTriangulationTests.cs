@@ -221,37 +221,46 @@ public class SpatialMeshTriangulationTests
         int face = mesh.AddFace([v0, v1, v2], TriangleUvs);
 
         var vertexHandles = new List<int>();
-        foreach (VertexDataSoA.ReadOnlyView vertex in mesh.Vertices)
+        mesh.WithVertices((slots, topology, positions) =>
         {
-            vertexHandles.Add(vertex.Slot);
-            Assert.Equal(mesh.GetVertexData(vertex.Slot).position, vertex.position);
-            Assert.Equal(
-                mesh.GetVertexData(vertex.Slot).topology.OutgoingHalfEdge,
-                vertex.topology.OutgoingHalfEdge
-            );
-        }
+            for (int i = 0; i < slots.Length; i++)
+            {
+                vertexHandles.Add(slots[i]);
+                Assert.Equal(mesh.GetVertexData(slots[i]).position, positions[i]);
+                Assert.Equal(
+                    mesh.GetVertexData(slots[i]).topology.OutgoingHalfEdge,
+                    topology[i].OutgoingHalfEdge
+                );
+            }
+        });
         Assert.Equal([v0, v1, v2], vertexHandles);
 
         var halfEdgeHandles = new List<int>();
-        foreach (HalfEdgeDataSoA.ReadOnlyView halfEdge in mesh.HalfEdges)
+        mesh.WithHalfEdges((slots, topology, uvs) =>
         {
-            halfEdgeHandles.Add(halfEdge.Slot);
-            HalfEdgeDataSoA.ReadOnlyView lookup = mesh.GetHalfEdgeData(halfEdge.Slot);
-            Assert.Equal(lookup.topology, halfEdge.topology);
-            Assert.Equal(lookup.UV, halfEdge.UV);
-        }
+            for (int i = 0; i < slots.Length; i++)
+            {
+                halfEdgeHandles.Add(slots[i]);
+                HalfEdgeData lookup = mesh.GetHalfEdgeData(slots[i]);
+                Assert.Equal(lookup.topology, topology[i]);
+                Assert.Equal(lookup.UV, uvs[i]);
+            }
+        });
         Assert.Equal([0, 1, 2, 3, 4, 5], halfEdgeHandles);
 
         var faceHandles = new List<int>();
-        foreach (FaceDataSoA.ReadOnlyView liveFace in mesh.Faces)
+        mesh.WithFaces((slots, topology, normals) =>
         {
-            faceHandles.Add(liveFace.Slot);
-            Assert.Equal(mesh.GetFaceData(liveFace.Slot).normal, liveFace.normal);
-            Assert.Equal(
-                mesh.GetFaceData(liveFace.Slot).topology.AdjacentHalfEdge,
-                liveFace.topology.AdjacentHalfEdge
-            );
-        }
+            for (int i = 0; i < slots.Length; i++)
+            {
+                faceHandles.Add(slots[i]);
+                Assert.Equal(mesh.GetFaceData(slots[i]).normal, normals[i]);
+                Assert.Equal(
+                    mesh.GetFaceData(slots[i]).topology.AdjacentHalfEdge,
+                    topology[i].AdjacentHalfEdge
+                );
+            }
+        });
         Assert.Equal([face], faceHandles);
 
         var corners = new List<int>();

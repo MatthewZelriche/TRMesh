@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 
 namespace TRMesh.Mesh;
 
-public partial class SpatialMesh
+public unsafe partial class SpatialMesh
 {
     // Circulates the outgoing half-edges around a vertex.
     ref struct HalfEdgesAroundVertex
@@ -39,8 +39,8 @@ public partial class SpatialMesh
                 return true;
             }
 
-            int twin = _mesh.HalfEdgeRef(_current).TwinHalfEdge;
-            int next = _mesh.HalfEdgeRef(twin).NextHalfEdge;
+            int twin = _mesh.HalfEdgePtr(_current)->TwinHalfEdge;
+            int next = _mesh.HalfEdgePtr(twin)->NextHalfEdge;
             if (next == _start || next == INVALID_HANDLE)
                 return false;
 
