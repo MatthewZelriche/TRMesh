@@ -28,4 +28,9 @@
       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- Opt-in for scripts/run-metrics.ps1 (-p:MetricsScope=true). -->
+  <ItemGroup Condition="'$(MetricsScope)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.Metrics" Version="4.14.0" PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>
