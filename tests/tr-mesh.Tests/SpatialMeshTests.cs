@@ -8,6 +8,25 @@ public class SpatialMeshTests
     static readonly Vector2[] TriangleUvs = [Vector2.Zero, Vector2.UnitX, Vector2.UnitY];
 
     [Fact]
+    public void IsAlive_ReportsLiveHandlesAndRejectsInvalidOnes()
+    {
+        using var mesh = new SpatialMesh();
+        int v0 = mesh.AddVertex(new Vector3(0, 0, 0));
+        int v1 = mesh.AddVertex(new Vector3(1, 0, 0));
+        int v2 = mesh.AddVertex(new Vector3(0, 1, 0));
+        int face = mesh.AddFace([v0, v1, v2], TriangleUvs);
+        int halfEdge = mesh.GetFaceData(face).topology.AdjacentHalfEdge;
+
+        Assert.True(mesh.IsVertexAlive(v0));
+        Assert.True(mesh.IsHalfEdgeAlive(halfEdge));
+        Assert.True(mesh.IsFaceAlive(face));
+        Assert.False(mesh.IsVertexAlive(SpatialMesh.INVALID_HANDLE));
+        Assert.False(mesh.IsHalfEdgeAlive(SpatialMesh.INVALID_HANDLE));
+        Assert.False(mesh.IsFaceAlive(SpatialMesh.INVALID_HANDLE));
+        Assert.False(mesh.IsVertexAlive(999));
+    }
+
+    [Fact]
     public void AddFace_Triangle_BuildsInteriorLoopAndBoundaryTwins()
     {
         using var mesh = new SpatialMesh();
