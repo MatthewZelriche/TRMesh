@@ -39,8 +39,8 @@ public unsafe partial class SpatialMesh
                 return true;
             }
 
-            int twin = _mesh.HalfEdgePtr(_current)->TwinHalfEdge;
-            int next = _mesh.HalfEdgePtr(twin)->NextHalfEdge;
+            int twin = _mesh.HalfEdgeRef(_current).TwinHalfEdge;
+            int next = _mesh.HalfEdgeRef(twin).NextHalfEdge;
             if (next == _start || next == INVALID_HANDLE)
                 return false;
 

@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using TRMesh.Containers;
 
 namespace TRMesh.Mesh;
 
@@ -32,6 +33,18 @@ public unsafe partial class SpatialMesh : IDisposable
     readonly HalfEdgeDataSoA _halfEdges = new();
     readonly FaceDataSoA _faces = new();
 
+    // All mutation goes through these recorders, or through the *Mut accessors which capture first.
+    readonly TableRecorder<VertexData> _vertexRecorder;
+    readonly TableRecorder<HalfEdgeData> _halfEdgeRecorder;
+    readonly TableRecorder<FaceData> _faceRecorder;
+
+    public SpatialMesh()
+    {
+        _vertexRecorder = new(_vertices);
+        _halfEdgeRecorder = new(_halfEdges);
+        _faceRecorder = new(_faces);
+    }
+
     public int VertexCount => _vertices.Count;
     public int HalfEdgeCount => _halfEdges.Count;
     public int EdgeCount => _halfEdges.Count / 2;
@@ -39,7 +52,8 @@ public unsafe partial class SpatialMesh : IDisposable
 
     public int AddVertex(Vector3 position)
     {
-        return _vertices.Insert(
+        MarkMutated();
+        return _vertexRecorder.Insert(
             new VertexData
             {
                 topology = new Vertex { OutgoingHalfEdge = INVALID_HANDLE },
@@ -116,7 +130,7 @@ public unsafe partial class SpatialMesh : IDisposable
             if (existing == INVALID_HANDLE)
                 continue;
 
-            if (_faces.IsAlive(HalfEdgePtr(existing)->AdjacentFace))
+            if (_faces.IsAlive(HalfEdgeRef(existing).AdjacentFace))
             {
                 throw new ArgumentException(
                     $"AddFace: An edge from {vtx} to {vtxNext} already exists and is not a boundary edge.",
@@ -151,7 +165,8 @@ public unsafe partial class SpatialMesh : IDisposable
 
         // Validation is complete, mutating the mesh state can safely occur.
 
-        int faceHandle = _faces.Insert(
+        MarkMutated();
+        int faceHandle = _faceRecorder.Insert(
             new FaceData
             {
                 topology = new Face { AdjacentHalfEdge = INVALID_HANDLE },
@@ -166,21 +181,21 @@ public unsafe partial class SpatialMesh : IDisposable
             int heHandle;
             if (existing != INVALID_HANDLE)
             {
-                HalfEdgePtr(existing)->AdjacentFace = faceHandle;
+                HalfEdgeMut(existing).AdjacentFace = faceHandle;
                 heHandle = existing;
             }
             else
             {
                 int nextVertex = (i + 1) % n;
                 heHandle = ConstructEdge(vertices[i], vertices[nextVertex]);
-                HalfEdgePtr(heHandle)->AdjacentFace = faceHandle;
+                HalfEdgeMut(heHandle).AdjacentFace = faceHandle;
             }
 
             hedges[i] = heHandle;
-            *HalfEdgeUvPtr(heHandle) = cornerUvs[i];
+            HalfEdgeUvMut(heHandle) = cornerUvs[i];
         }
 
-        FacePtr(faceHandle)->AdjacentHalfEdge = hedges[0];
+        FaceMut(faceHandle).AdjacentHalfEdge = hedges[0];
 
         // Perform the miserable task of linking up all the half-edges correctly - in two passes.
         for (int i = 0; i < n; i++)
@@ -189,9 +204,9 @@ public unsafe partial class SpatialMesh : IDisposable
             if (existing == INVALID_HANDLE)
                 continue;
 
-            HalfEdge* existingHe = HalfEdgePtr(existing);
-            oldPrev[i] = existingHe->PrevHalfEdge;
-            oldNext[i] = existingHe->NextHalfEdge;
+            ref readonly HalfEdge existingHe = ref HalfEdgeRef(existing);
+            oldPrev[i] = existingHe.PrevHalfEdge;
+            oldNext[i] = existingHe.NextHalfEdge;
         }
         for (int i = 0; i < n; i++)
         {
@@ -201,8 +216,8 @@ public unsafe partial class SpatialMesh : IDisposable
 
             int heHandle = hedges[i];
             int heNextHandle = hedges[iNext];
-            int heTwinHandle = HalfEdgePtr(heHandle)->TwinHalfEdge;
-            int heNextTwinHandle = HalfEdgePtr(heNextHandle)->TwinHalfEdge;
+            int heTwinHandle = HalfEdgeRef(heHandle).TwinHalfEdge;
+            int heNextTwinHandle = HalfEdgeRef(heNextHandle).TwinHalfEdge;
 
             bool currExisted = existingHandles[i] != INVALID_HANDLE;
             bool nextExisted = existingHandles[iNext] != INVALID_HANDLE;
@@ -210,13 +225,11 @@ public unsafe partial class SpatialMesh : IDisposable
             int outgoing = currExisted ? oldNext[i] : heTwinHandle;
             int incoming = nextExisted ? oldPrev[iNext] : heNextTwinHandle;
 
-            HalfEdgePtr(incoming)->NextHalfEdge = outgoing;
-            HalfEdgePtr(outgoing)->PrevHalfEdge = incoming;
+            HalfEdgeMut(incoming).NextHalfEdge = outgoing;
+            HalfEdgeMut(outgoing).PrevHalfEdge = incoming;
 
-            HalfEdge* heW = HalfEdgePtr(heHandle);
-            HalfEdge* heNextW = HalfEdgePtr(heNextHandle);
-            heW->NextHalfEdge = heNextHandle;
-            heNextW->PrevHalfEdge = heHandle;
+            HalfEdgeMut(heHandle).NextHalfEdge = heNextHandle;
+            HalfEdgeMut(heNextHandle).PrevHalfEdge = heHandle;
         }
 
         return faceHandle;
@@ -235,7 +248,7 @@ public unsafe partial class SpatialMesh : IDisposable
     {
         foreach (int he in new HalfEdgesAroundVertex(this, from))
         {
-            if (HalfEdgePtr(HalfEdgePtr(he)->TwinHalfEdge)->SourceVertex == to)
+            if (HalfEdgeRef(HalfEdgeRef(he).TwinHalfEdge).SourceVertex == to)
                 return he;
         }
 
@@ -244,10 +257,10 @@ public unsafe partial class SpatialMesh : IDisposable
 
     int ConstructEdge(int from, int to)
     {
-        int he = _halfEdges.Insert();
-        int twin = _halfEdges.Insert();
+        int he = _halfEdgeRecorder.Insert(default);
+        int twin = _halfEdgeRecorder.Insert(default);
 
-        *HalfEdgePtr(he) = new HalfEdge
+        HalfEdgeMut(he) = new HalfEdge
         {
             SourceVertex = from,
             TwinHalfEdge = twin,
@@ -255,7 +268,7 @@ public unsafe partial class SpatialMesh : IDisposable
             PrevHalfEdge = twin,
             AdjacentFace = INVALID_HANDLE,
         };
-        *HalfEdgePtr(twin) = new HalfEdge
+        HalfEdgeMut(twin) = new HalfEdge
         {
             SourceVertex = to,
             TwinHalfEdge = he,
@@ -264,39 +277,61 @@ public unsafe partial class SpatialMesh : IDisposable
             AdjacentFace = INVALID_HANDLE,
         };
 
-        Vertex* fromVertex = VertexPtr(from);
-        if (fromVertex->OutgoingHalfEdge == INVALID_HANDLE)
-            fromVertex->OutgoingHalfEdge = he;
+        if (VertexRef(from).OutgoingHalfEdge == INVALID_HANDLE)
+            VertexMut(from).OutgoingHalfEdge = he;
 
-        Vertex* toVertex = VertexPtr(to);
-        if (toVertex->OutgoingHalfEdge == INVALID_HANDLE)
-            toVertex->OutgoingHalfEdge = twin;
+        if (VertexRef(to).OutgoingHalfEdge == INVALID_HANDLE)
+            VertexMut(to).OutgoingHalfEdge = twin;
 
         return he;
     }
 
+    // Read accessors never record. Writes must go through the *Mut accessors, which capture the row
+    // for an active recording before returning it. The returned refs alias native storage and are
+    // invalidated by structural modification, same as GetPointers.
+    //
+    // The unused void* parameter is intentional: an optional pointer in the signature makes every
+    // call site require an unsafe context, even when the argument is omitted. This is to ensure these calls
+    // are treated with the proper safety respect they deserve despite appearing to return "safe" references.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    Vertex* VertexPtr(int handle)
+    ref readonly Vertex VertexRef(int handle, void* enforceUnsafe = null)
     {
         _vertices.GetPointers(handle, out Vertex* topology, out _);
-        return topology;
+        return ref *topology;
     }
 
-    HalfEdge* HalfEdgePtr(int handle)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    ref readonly HalfEdge HalfEdgeRef(int handle, void* enforceUnsafe = null)
     {
         _halfEdges.GetPointers(handle, out HalfEdge* topology, out _);
-        return topology;
+        return ref *topology;
     }
 
-    Vector2* HalfEdgeUvPtr(int handle)
+    ref Vertex VertexMut(int handle, void* enforceUnsafe = null)
     {
+        _vertexRecorder.Capture(handle);
+        _vertices.GetPointers(handle, out Vertex* topology, out _);
+        return ref *topology;
+    }
+
+    ref HalfEdge HalfEdgeMut(int handle, void* enforceUnsafe = null)
+    {
+        _halfEdgeRecorder.Capture(handle);
+        _halfEdges.GetPointers(handle, out HalfEdge* topology, out _);
+        return ref *topology;
+    }
+
+    ref Vector2 HalfEdgeUvMut(int handle, void* enforceUnsafe = null)
+    {
+        _halfEdgeRecorder.Capture(handle);
         _halfEdges.GetPointers(handle, out _, out Vector2* uv);
-        return uv;
+        return ref *uv;
     }
 
-    Face* FacePtr(int handle)
+    ref Face FaceMut(int handle, void* enforceUnsafe = null)
     {
+        _faceRecorder.Capture(handle);
         _faces.GetPointers(handle, out Face* topology, out _);
-        return topology;
+        return ref *topology;
     }
 }

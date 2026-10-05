@@ -1,11 +1,12 @@
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace TRMesh.Mesh;
 
-public partial class SpatialMesh
+public unsafe partial class SpatialMesh
 {
-    // Sets vertex positions as one validated operation. Topology is unchanged, but every face
-    // normal is rebuilt because neighboring faces may also have been deformed by the moved vertices.
+    // Sets vertex positions as one validated operation. Topology is unchanged; the normal of every
+    // face around a moved vertex is rebuilt.
     public void SetVertexPositions(ReadOnlySpan<int> vertices, ReadOnlySpan<Vector3> positions)
     {
         if (vertices.Length != positions.Length)
@@ -24,31 +25,39 @@ public partial class SpatialMesh
                 throw new ArgumentException("Vertex positions must be finite.", nameof(positions));
         }
 
+        MarkMutated();
         for (int index = 0; index < vertices.Length; index++)
+        {
+            _vertexRecorder.Capture(vertices[index]);
             _vertices.SetPosition(vertices[index], positions[index]);
+        }
 
-        RecomputeFaceNormals();
+        var faces = new HashSet<int>();
+        var facePositions = new List<Vector3>();
+        foreach (int vertex in vertices)
+        {
+            foreach (int halfEdge in new HalfEdgesAroundVertex(this, vertex))
+            {
+                int face = HalfEdgeRef(halfEdge).AdjacentFace;
+                if (face != INVALID_HANDLE && faces.Add(face))
+                    RecomputeFaceNormal(face, facePositions);
+            }
+        }
     }
 
-    private void RecomputeFaceNormals()
+    private void RecomputeFaceNormal(int face, List<Vector3> positions)
     {
-        FaceDataSoA.Enumerator faces = _faces.GetEnumerator();
-        while (faces.MoveNext())
+        positions.Clear();
+        int start = _faces.GetTopology(face).AdjacentHalfEdge;
+        int halfEdge = start;
+        do
         {
-            int face = faces.CurrentSlot;
-            FaceData data = faces.Current;
-            int start = data.topology.AdjacentHalfEdge;
-            var positions = new List<Vector3>();
-            int halfEdge = start;
-            do
-            {
-                HalfEdge topology = _halfEdges.Get(halfEdge).topology;
-                positions.Add(_vertices.Get(topology.SourceVertex).position);
-                halfEdge = topology.NextHalfEdge;
-            } while (halfEdge != start);
+            ref readonly HalfEdge topology = ref HalfEdgeRef(halfEdge);
+            positions.Add(_vertices.GetPosition(topology.SourceVertex));
+            halfEdge = topology.NextHalfEdge;
+        } while (halfEdge != start);
 
-            data.normal = Util.Math.ComputeFaceNormal(positions.ToArray());
-            _faces.Set(face, data);
-        }
+        _faceRecorder.Capture(face);
+        _faces.SetNormal(face, Util.Math.ComputeFaceNormal(CollectionsMarshal.AsSpan(positions)));
     }
 }

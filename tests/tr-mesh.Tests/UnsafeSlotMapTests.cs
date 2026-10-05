@@ -62,52 +62,77 @@ public unsafe class UnsafeSlotMapTests
     }
 
     [Fact]
-    public void InsertAt_ActivatesRequestedFreeHandleAndRepairsFreePool()
+    public void UndoInsert_ThatGrewSparseArray_RestoresExactState()
+    {
+        using var map = new UnsafeSlotMap<int>();
+        map.Insert(10);
+        int[] before = State(map);
+
+        map.Insert(20);
+        map.UndoInsert(grew: true);
+
+        Assert.Equal(before, State(map));
+    }
+
+    [Fact]
+    public void UndoInsert_ThatReusedFreeHandle_RestoresExactState()
+    {
+        using var map = new UnsafeSlotMap<int>();
+        map.Insert(10);
+        int freed = map.Insert(20);
+        map.Insert(30);
+        map.Remove(freed);
+        int[] before = State(map);
+
+        Assert.Equal(freed, map.Insert(40));
+        map.UndoInsert(grew: false);
+
+        Assert.Equal(before, State(map));
+    }
+
+    [Fact]
+    public void UndoRemove_RestoresDenseOrderAndFreeStack()
     {
         using var map = new UnsafeSlotMap<int>();
         int first = map.Insert(10);
-        int requested = map.Insert(20);
-        int otherFree = map.Insert(30);
-        map.Remove(requested);
-        map.Remove(otherFree);
+        map.Insert(20);
+        int third = map.Insert(30);
+        map.Remove(third);
+        int[] before = State(map);
 
-        map.InsertAt(requested, 200);
+        int removedDenseIndex = map.GetDenseIndex(first);
+        map.Remove(first);
+        map.UndoRemove(10, removedDenseIndex);
 
-        Assert.Equal(2, map.Count);
-        Assert.Equal(10, map[first]);
-        Assert.Equal(200, map[requested]);
-        Assert.Equal(otherFree, map.Insert(300));
-        Assert.Equal(300, map[otherFree]);
+        Assert.Equal(before, State(map));
+        Assert.Equal(third, map.Insert(40));
     }
 
     [Fact]
-    public void InsertAt_BeyondSparseExtentLeavesIntermediateHandlesReusable()
+    public void UndoRemove_OfLastDenseValue_RestoresExactState()
     {
         using var map = new UnsafeSlotMap<int>();
-        Assert.Equal(0, map.Insert(10));
+        map.Insert(10);
+        int last = map.Insert(20);
+        int[] before = State(map);
 
-        map.InsertAt(5, 50);
+        int removedDenseIndex = map.GetDenseIndex(last);
+        map.Remove(last);
+        map.UndoRemove(20, removedDenseIndex);
 
-        Assert.Equal(2, map.Count);
-        Assert.Equal(50, map[5]);
-        for (int handle = 1; handle < 5; handle++)
-            Assert.False(map.Contains(handle));
-
-        var reused = new HashSet<int>();
-        for (int i = 0; i < 4; i++)
-            reused.Add(map.Insert(100 + i));
-
-        Assert.Equal(new HashSet<int> { 1, 2, 3, 4 }, reused);
+        Assert.Equal(before, State(map));
     }
 
-    [Fact]
-    public void InsertAt_RejectsNegativeAndActiveHandles()
+    static int[] State(UnsafeSlotMap<int> map)
     {
-        using var map = new UnsafeSlotMap<int>();
-        int active = map.Insert(10);
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => map.InsertAt(-1, 20));
-        Assert.Throws<InvalidOperationException>(() => map.InsertAt(active, 20));
+        var values = new List<int>();
+        var enumerator = map.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            values.Add(enumerator.CurrentSlot);
+            values.Add(enumerator.Current);
+        }
+        return [.. map.CopyAllocatorState(), values.Count, .. values];
     }
 
     [Fact]

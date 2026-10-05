@@ -307,23 +307,23 @@ public unsafe partial class SpatialMesh
 
         for (int halfEdge = 0; halfEdge < halfEdgeCount; halfEdge++)
         {
-            HalfEdge* topology = HalfEdgePtr(halfEdge);
-            if (!IsHandleInRange(topology->SourceVertex, vertexCount))
+            ref readonly HalfEdge topology = ref HalfEdgeRef(halfEdge);
+            if (!IsHandleInRange(topology.SourceVertex, vertexCount))
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range source vertex.");
-            if (!IsHandleInRange(topology->TwinHalfEdge, halfEdgeCount))
+            if (!IsHandleInRange(topology.TwinHalfEdge, halfEdgeCount))
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range twin half-edge.");
-            if (!IsHandleInRange(topology->NextHalfEdge, halfEdgeCount))
+            if (!IsHandleInRange(topology.NextHalfEdge, halfEdgeCount))
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range next half-edge.");
-            if (!IsHandleInRange(topology->PrevHalfEdge, halfEdgeCount))
+            if (!IsHandleInRange(topology.PrevHalfEdge, halfEdgeCount))
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range previous half-edge.");
             if (
-                topology->AdjacentFace != INVALID_HANDLE
-                && !IsHandleInRange(topology->AdjacentFace, faceCount)
+                topology.AdjacentFace != INVALID_HANDLE
+                && !IsHandleInRange(topology.AdjacentFace, faceCount)
             )
             {
                 InvalidTopology($"Half-edge {halfEdge} has an out-of-range adjacent face.");
             }
-            vertexDegrees[topology->SourceVertex]++;
+            vertexDegrees[topology.SourceVertex]++;
         }
 
         for (int face = 0; face < faceCount; face++)
@@ -335,32 +335,32 @@ public unsafe partial class SpatialMesh
 
         for (int halfEdge = 0; halfEdge < halfEdgeCount; halfEdge++)
         {
-            HalfEdge* topology = HalfEdgePtr(halfEdge);
-            if (topology->TwinHalfEdge == halfEdge)
+            ref readonly HalfEdge topology = ref HalfEdgeRef(halfEdge);
+            if (topology.TwinHalfEdge == halfEdge)
                 InvalidTopology($"Half-edge {halfEdge} is its own twin.");
-            if (HalfEdgePtr(topology->TwinHalfEdge)->TwinHalfEdge != halfEdge)
+            if (HalfEdgeRef(topology.TwinHalfEdge).TwinHalfEdge != halfEdge)
                 InvalidTopology($"Half-edge {halfEdge} has a non-reciprocal twin link.");
-            if (HalfEdgePtr(topology->NextHalfEdge)->PrevHalfEdge != halfEdge)
+            if (HalfEdgeRef(topology.NextHalfEdge).PrevHalfEdge != halfEdge)
                 InvalidTopology($"Half-edge {halfEdge} has a non-reciprocal next link.");
-            if (HalfEdgePtr(topology->PrevHalfEdge)->NextHalfEdge != halfEdge)
+            if (HalfEdgeRef(topology.PrevHalfEdge).NextHalfEdge != halfEdge)
                 InvalidTopology($"Half-edge {halfEdge} has a non-reciprocal previous link.");
             if (
-                HalfEdgePtr(topology->NextHalfEdge)->SourceVertex
-                != HalfEdgePtr(topology->TwinHalfEdge)->SourceVertex
+                HalfEdgeRef(topology.NextHalfEdge).SourceVertex
+                != HalfEdgeRef(topology.TwinHalfEdge).SourceVertex
             )
             {
                 InvalidTopology($"Half-edge {halfEdge} does not continue from its target vertex.");
             }
-            if (HalfEdgePtr(topology->NextHalfEdge)->AdjacentFace != topology->AdjacentFace)
+            if (HalfEdgeRef(topology.NextHalfEdge).AdjacentFace != topology.AdjacentFace)
                 InvalidTopology($"Half-edge {halfEdge} crosses an adjacent-face boundary.");
         }
 
         for (int halfEdge = 0; halfEdge < halfEdgeCount; halfEdge++)
         {
-            HalfEdge* topology = HalfEdgePtr(halfEdge);
+            ref readonly HalfEdge topology = ref HalfEdgeRef(halfEdge);
             if (
-                topology->AdjacentFace == INVALID_HANDLE
-                && HalfEdgePtr(topology->TwinHalfEdge)->AdjacentFace == INVALID_HANDLE
+                topology.AdjacentFace == INVALID_HANDLE
+                && HalfEdgeRef(topology.TwinHalfEdge).AdjacentFace == INVALID_HANDLE
             )
             {
                 InvalidTopology($"Half-edge {halfEdge} and its twin are not adjacent to any face.");
@@ -377,18 +377,18 @@ public unsafe partial class SpatialMesh
                     InvalidTopology($"Isolated vertex {vertex} has an outgoing half-edge.");
                 continue;
             }
-            if (outgoing == INVALID_HANDLE || HalfEdgePtr(outgoing)->SourceVertex != vertex)
+            if (outgoing == INVALID_HANDLE || HalfEdgeRef(outgoing).SourceVertex != vertex)
                 InvalidTopology($"Vertex {vertex} does not reference one of its outgoing half-edges.");
 
             int current = outgoing;
             int visitedCount = 0;
             do
             {
-                if (HalfEdgePtr(current)->SourceVertex != vertex || vertexVisited[current])
+                if (HalfEdgeRef(current).SourceVertex != vertex || vertexVisited[current])
                     InvalidTopology($"Vertex {vertex} has an invalid or disconnected half-edge fan.");
                 vertexVisited[current] = true;
                 visitedCount++;
-                current = HalfEdgePtr(HalfEdgePtr(current)->TwinHalfEdge)->NextHalfEdge;
+                current = HalfEdgeRef(HalfEdgeRef(current).TwinHalfEdge).NextHalfEdge;
             } while (current != outgoing && visitedCount <= vertexDegrees[vertex]);
 
             if (current != outgoing || visitedCount != vertexDegrees[vertex])
@@ -410,14 +410,14 @@ public unsafe partial class SpatialMesh
             var vertices = new HashSet<int>();
             do
             {
-                HalfEdge* topology = HalfEdgePtr(current);
-                if (topology->AdjacentFace != face || faceVisited[current])
+                ref readonly HalfEdge topology = ref HalfEdgeRef(current);
+                if (topology.AdjacentFace != face || faceVisited[current])
                     InvalidTopology($"Face {face} does not contain exactly one closed boundary cycle.");
-                if (!vertices.Add(topology->SourceVertex))
+                if (!vertices.Add(topology.SourceVertex))
                     InvalidTopology($"Face {face} contains a repeated vertex.");
                 faceVisited[current] = true;
                 edgeCount++;
-                current = topology->NextHalfEdge;
+                current = topology.NextHalfEdge;
             } while (current != start && edgeCount <= halfEdgeCount);
 
             if (current != start || edgeCount < 3)
@@ -426,7 +426,7 @@ public unsafe partial class SpatialMesh
 
         for (int halfEdge = 0; halfEdge < halfEdgeCount; halfEdge++)
         {
-            if (HalfEdgePtr(halfEdge)->AdjacentFace != INVALID_HANDLE && !faceVisited[halfEdge])
+            if (HalfEdgeRef(halfEdge).AdjacentFace != INVALID_HANDLE && !faceVisited[halfEdge])
                 InvalidTopology($"Half-edge {halfEdge} is not reachable from its adjacent face.");
         }
     }

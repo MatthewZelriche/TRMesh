@@ -27,13 +27,13 @@ public unsafe partial class SpatialMesh
         // Triangle peek: the overwhelmingly common case, so skip stackalloc and
         // the second loop walk entirely.
         int h0 = start;
-        int h1 = HalfEdgePtr(h0)->NextHalfEdge;
+        int h1 = HalfEdgeRef(h0).NextHalfEdge;
         if (h1 == INVALID_HANDLE)
             return false;
-        int h2 = HalfEdgePtr(h1)->NextHalfEdge;
+        int h2 = HalfEdgeRef(h1).NextHalfEdge;
         if (h2 == INVALID_HANDLE)
             return false;
-        int h3 = HalfEdgePtr(h2)->NextHalfEdge;
+        int h3 = HalfEdgeRef(h2).NextHalfEdge;
         if (h3 == INVALID_HANDLE)
             return false;
         // Trivial case check - is this just a triangle?
@@ -49,7 +49,7 @@ public unsafe partial class SpatialMesh
         do
         {
             count++;
-            he = HalfEdgePtr(he)->NextHalfEdge;
+            he = HalfEdgeRef(he).NextHalfEdge;
             if (he == INVALID_HANDLE)
                 return false;
         } while (he != start);
@@ -59,10 +59,10 @@ public unsafe partial class SpatialMesh
         he = start;
         for (int i = 0; i < count; i++)
         {
-            HalfEdge* halfEdge = HalfEdgePtr(he);
+            ref readonly HalfEdge halfEdge = ref HalfEdgeRef(he);
             corners[i] = he;
-            positions[i] = _vertices.Get(halfEdge->SourceVertex).position;
-            he = halfEdge->NextHalfEdge;
+            positions[i] = _vertices.Get(halfEdge.SourceVertex).position;
+            he = halfEdge.NextHalfEdge;
         }
 
         return TriangulateFaceCorners(corners, positions, output);

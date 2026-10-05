@@ -1377,7 +1377,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.Append(accessibility)
             .Append(" sealed class ")
             .Append(soaName)
-            .AppendLine(" : IDisposable");
+            .Append(" : IDisposable, IRecordableTable<")
+            .Append(model.StructFullyQualifiedName)
+            .AppendLine(">");
         sb.AppendLine("{");
 
         foreach (var field in model.Fields)
@@ -1427,6 +1429,9 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
 
+        sb.Append("    public int SparseCount => ").Append(master.StorageName).AppendLine(".SparseCount;");
+        sb.AppendLine();
+
         sb.AppendLine("    [MethodImpl(MethodImplOptions.AggressiveInlining)]");
         sb.Append("    public bool IsAlive(int slot) => ")
             .Append(master.StorageName)
@@ -1463,8 +1468,10 @@ public sealed class SoAGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
 
-        sb.AppendLine("    /// <summary>Removes the element at the specified slot.</summary>");
-        sb.AppendLine("    public void RemoveAt(int slot)");
+        sb.AppendLine(
+            "    /// <summary>Removes the element at the specified slot and returns the dense index it vacated.</summary>"
+        );
+        sb.AppendLine("    public int RemoveAt(int slot)");
         sb.AppendLine("    {");
         sb.AppendLine("        EnsureNoActiveColumnAccess();");
         sb.Append("        int denseIndex = ")
@@ -1474,6 +1481,57 @@ public sealed class SoAGenerator : IIncrementalGenerator
         foreach (var field in parallel)
             AppendSwapRemove(sb, field.StorageName, "        ");
         sb.Append("        ").Append(master.StorageName).AppendLine(".Remove(slot);");
+        sb.AppendLine("        return denseIndex;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine(
+            "    /// <summary>Exactly reverses the most recent structural change, which must have been an Insert.</summary>"
+        );
+        sb.AppendLine("    public void UndoInsert(bool grew)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        EnsureNoActiveColumnAccess();");
+        sb.Append("        ").Append(master.StorageName).AppendLine(".UndoInsert(grew);");
+        foreach (var field in parallel)
+            sb.Append("        ").Append(field.StorageName).AppendLine(".Resize(Count);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        sb.AppendLine(
+            "    /// <summary>Exactly reverses the most recent structural change, which must have been a RemoveAt that vacated denseIndex.</summary>"
+        );
+        sb.Append("    public void UndoRemove(")
+            .Append(model.StructFullyQualifiedName)
+            .AppendLine(" value, int denseIndex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        EnsureNoActiveColumnAccess();");
+        sb.Append("        ")
+            .Append(master.StorageName)
+            .Append(".UndoRemove(value.")
+            .Append(master.EscapedName)
+            .AppendLine(", denseIndex);");
+        foreach (var field in parallel)
+        {
+            sb.Append("        if (denseIndex == ").Append(field.StorageName).AppendLine(".Count)");
+            sb.Append("            ")
+                .Append(field.StorageName)
+                .Append(".Add(value.")
+                .Append(field.EscapedName)
+                .AppendLine(");");
+            sb.AppendLine("        else");
+            sb.AppendLine("        {");
+            sb.Append("            ")
+                .Append(field.StorageName)
+                .Append(".Add(")
+                .Append(field.StorageName)
+                .AppendLine("[denseIndex]);");
+            sb.Append("            ")
+                .Append(field.StorageName)
+                .Append("[denseIndex] = value.")
+                .Append(field.EscapedName)
+                .AppendLine(";");
+            sb.AppendLine("        }");
+        }
         sb.AppendLine("    }");
         sb.AppendLine();
 
