@@ -246,9 +246,9 @@ public unsafe partial class SpatialMesh : IDisposable
     // Finds a half-edge between two given vertices identified by their handles.
     int FindHalfEdgeBetweenUnchecked(int from, int to)
     {
-        foreach (int he in new HalfEdgesAroundVertex(this, from))
+        foreach (int he in HalfEdgeRing.AroundVertex(this, from))
         {
-            if (HalfEdgeRef(HalfEdgeRef(he).TwinHalfEdge).SourceVertex == to)
+            if (OppositeVertex(he) == to)
                 return he;
         }
 

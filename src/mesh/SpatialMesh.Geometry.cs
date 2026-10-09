@@ -21,7 +21,7 @@ public unsafe partial class SpatialMesh
             if (!uniqueVertices.Add(vertex))
                 throw new ArgumentException("Vertex handles must be unique.", nameof(vertices));
             Vector3 position = positions[index];
-            if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z))
+            if (!IsFinite(position))
                 throw new ArgumentException("Vertex positions must be finite.", nameof(positions));
         }
 
@@ -32,15 +32,20 @@ public unsafe partial class SpatialMesh
             _vertices.SetPosition(vertices[index], positions[index]);
         }
 
+        RecomputeNormalsAroundVertices(vertices);
+    }
+
+    private void RecomputeNormalsAroundVertices(ReadOnlySpan<int> vertices)
+    {
         var faces = new HashSet<int>();
-        var facePositions = new List<Vector3>();
+        var positions = new List<Vector3>();
         foreach (int vertex in vertices)
         {
-            foreach (int halfEdge in new HalfEdgesAroundVertex(this, vertex))
+            foreach (int halfEdge in HalfEdgeRing.AroundVertex(this, vertex))
             {
                 int face = HalfEdgeRef(halfEdge).AdjacentFace;
                 if (face != INVALID_HANDLE && faces.Add(face))
-                    RecomputeFaceNormal(face, facePositions);
+                    RecomputeFaceNormal(face, positions);
             }
         }
     }
@@ -48,16 +53,13 @@ public unsafe partial class SpatialMesh
     private void RecomputeFaceNormal(int face, List<Vector3> positions)
     {
         positions.Clear();
-        int start = _faces.GetTopology(face).AdjacentHalfEdge;
-        int halfEdge = start;
-        do
-        {
-            ref readonly HalfEdge topology = ref HalfEdgeRef(halfEdge);
-            positions.Add(_vertices.GetPosition(topology.SourceVertex));
-            halfEdge = topology.NextHalfEdge;
-        } while (halfEdge != start);
+        foreach (int halfEdge in HalfEdgeRing.AroundFace(this, face))
+            positions.Add(_vertices.GetPosition(HalfEdgeRef(halfEdge).SourceVertex));
 
         _faceRecorder.Capture(face);
         _faces.SetNormal(face, Util.Math.ComputeFaceNormal(CollectionsMarshal.AsSpan(positions)));
     }
+
+    private static bool IsFinite(Vector3 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 }

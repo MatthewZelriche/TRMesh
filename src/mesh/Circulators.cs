@@ -4,19 +4,27 @@ namespace TRMesh.Mesh;
 
 public unsafe partial class SpatialMesh
 {
-    // Circulates the outgoing half-edges around a vertex.
-    ref struct HalfEdgesAroundVertex
+    // Circulates outgoing half-edges around a vertex, or boundary half-edges around a face.
+    ref struct HalfEdgeRing
     {
         readonly SpatialMesh _mesh;
         readonly int _start;
+        readonly bool _aroundVertex;
         int _current;
 
-        public HalfEdgesAroundVertex(SpatialMesh mesh, int vertex)
+        HalfEdgeRing(SpatialMesh mesh, int start, bool aroundVertex)
         {
             _mesh = mesh;
-            _start = mesh._vertices.Get(vertex).topology.OutgoingHalfEdge;
+            _start = start;
+            _aroundVertex = aroundVertex;
             _current = INVALID_HANDLE;
         }
+
+        public static HalfEdgeRing AroundVertex(SpatialMesh mesh, int vertex) =>
+            new(mesh, mesh._vertices.Get(vertex).topology.OutgoingHalfEdge, aroundVertex: true);
+
+        public static HalfEdgeRing AroundFace(SpatialMesh mesh, int face) =>
+            new(mesh, mesh._faces.GetTopology(face).AdjacentHalfEdge, aroundVertex: false);
 
         public readonly int Current
         {
@@ -25,7 +33,7 @@ public unsafe partial class SpatialMesh
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public readonly HalfEdgesAroundVertex GetEnumerator() => this;
+        public readonly HalfEdgeRing GetEnumerator() => this;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
@@ -39,8 +47,9 @@ public unsafe partial class SpatialMesh
                 return true;
             }
 
-            int twin = _mesh.HalfEdgeRef(_current).TwinHalfEdge;
-            int next = _mesh.HalfEdgeRef(twin).NextHalfEdge;
+            int next = _aroundVertex
+                ? _mesh.HalfEdgeRef(_mesh.HalfEdgeRef(_current).TwinHalfEdge).NextHalfEdge
+                : _mesh.HalfEdgeRef(_current).NextHalfEdge;
             if (next == _start || next == INVALID_HANDLE)
                 return false;
 
@@ -48,4 +57,7 @@ public unsafe partial class SpatialMesh
             return true;
         }
     }
+
+    int OppositeVertex(int halfEdge) =>
+        HalfEdgeRef(HalfEdgeRef(halfEdge).TwinHalfEdge).SourceVertex;
 }
