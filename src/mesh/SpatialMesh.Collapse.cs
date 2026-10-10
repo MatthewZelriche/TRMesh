@@ -4,6 +4,42 @@ namespace TRMesh.Mesh;
 
 public unsafe partial class SpatialMesh
 {
+    // Collapses each selected edge at its midpoint. Edges removed as a side effect of an earlier
+    // collapse in the same call are skipped. Half-edge handles are canonicalized (min of twins).
+    public void CollapseEdges(ReadOnlySpan<int> halfEdges)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(halfEdges.Length, 1);
+        var unique = new HashSet<int>();
+        var ordered = new List<int>(halfEdges.Length);
+        foreach (int halfEdge in halfEdges)
+        {
+            if (!IsHalfEdgeAlive(halfEdge))
+                throw new ArgumentException("A selected edge handle is not live.", nameof(halfEdges));
+
+            int canonical = Math.Min(halfEdge, HalfEdgeRef(halfEdge).TwinHalfEdge);
+            if (!unique.Add(canonical))
+            {
+                throw new ArgumentException(
+                    "Selected edge handles must be unique.",
+                    nameof(halfEdges)
+                );
+            }
+
+            ordered.Add(canonical);
+        }
+
+        foreach (int halfEdge in ordered)
+        {
+            if (!IsHalfEdgeAlive(halfEdge))
+                continue;
+
+            int from = HalfEdgeRef(halfEdge).SourceVertex;
+            int to = OppositeVertex(halfEdge);
+            Vector3 midpoint = (_vertices.Get(from).position + _vertices.Get(to).position) * 0.5f;
+            CollapseEdge(halfEdge, to, midpoint);
+        }
+    }
+
     // Contracts one edge into either endpoint, preserving that endpoint's handle and placing it at
     // targetPosition. Faces lose the contracted corner and are removed if fewer than three remain.
     public void CollapseEdge(int halfEdge, int target, Vector3 targetPosition)
