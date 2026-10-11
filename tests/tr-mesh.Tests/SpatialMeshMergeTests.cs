@@ -57,6 +57,35 @@ public sealed class SpatialMeshMergeTests
     }
 
     [Fact]
+    public void EveryVertexOfAStandaloneFaceMergesAndUndoRestoresIt()
+    {
+        using var mesh = new SpatialMesh();
+        int target = mesh.AddVertex(Vector3.Zero);
+        int b = mesh.AddVertex(new Vector3(2f, 0f, 0f));
+        int c = mesh.AddVertex(new Vector3(2f, 2f, 0f));
+        int d = mesh.AddVertex(new Vector3(0f, 2f, 0f));
+        mesh.AddFace([target, b, c, d], QuadUvs);
+        byte[] before = Serialize(mesh);
+        var centroid = new Vector3(1f, 1f, 0f);
+
+        MeshPatch patch = mesh.Record(value =>
+            value.MergeVertices([target, b, c, d], target, centroid)
+        );
+
+        Assert.Equal(1, mesh.VertexCount);
+        Assert.Equal(0, mesh.EdgeCount);
+        Assert.Equal(0, mesh.FaceCount);
+        Assert.True(mesh.IsVertexAlive(target));
+        Assert.Equal(centroid, mesh.GetVertexData(target).position);
+        AssertValid(mesh);
+
+        mesh.Revert(patch);
+
+        Assert.Equal(before, Serialize(mesh));
+        AssertValid(mesh);
+    }
+
+    [Fact]
     public void FaceBridgesCanGrowTheTargetComponentAcrossMultipleIslands()
     {
         using var mesh = new SpatialMesh();

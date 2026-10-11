@@ -35,6 +35,9 @@ public unsafe partial class SpatialMesh
             int halfEdge = FindEdgeToSelectedVertex(target, selected);
             if (halfEdge == INVALID_HANDLE)
             {
+                if (RemoveIsolatedVertices(selected))
+                    continue;
+
                 throw new ArgumentException(
                     "The selected vertices became disconnected while collapsing.",
                     nameof(vertices)
@@ -45,6 +48,26 @@ public unsafe partial class SpatialMesh
             CollapseEdge(halfEdge, target, targetPosition);
             selected.Remove(source);
         }
+    }
+
+    private bool RemoveIsolatedVertices(HashSet<int> selected)
+    {
+        // Initial disconnected selections are rejected before collapsing. These vertices became
+        // isolated when a collapsed triangle removed its last face and unsupported boundary edges.
+        bool removed = false;
+        foreach (int vertex in selected.ToArray())
+        {
+            if (VertexRef(vertex).OutgoingHalfEdge != INVALID_HANDLE)
+                continue;
+
+            if (!removed)
+                MarkMutated();
+            _vertexRecorder.RemoveAt(vertex);
+            selected.Remove(vertex);
+            removed = true;
+        }
+
+        return removed;
     }
 
     private HashSet<int> ValidateMerge(
